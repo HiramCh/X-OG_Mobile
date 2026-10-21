@@ -22,6 +22,40 @@
 #include "qemu/mstring.h"
 #include "renderer.h"
 
+#include <stdlib.h>
+
+/* XEMU_ANDROID_VK_NO_GEOM=1: skip the geometry shader for primitives that
+ * have a native Vulkan topology (GPUs such as Mali run geometry shaders very
+ * slowly or fault on them). Quads, quad strips, polygons and non-fill
+ * polygon modes still need the geometry stage. */
+bool pgraph_vk_android_skip_geom(const GeomState *state)
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *v = getenv("XEMU_ANDROID_VK_NO_GEOM");
+        enabled = v && v[0] == '1';
+        if (enabled) {
+            fprintf(stderr, "Vulkan: geometry shaders disabled for native topologies "
+                            "(XEMU_ANDROID_VK_NO_GEOM)\n");
+        }
+    }
+    if (!enabled || state->polygon_front_mode != POLY_MODE_FILL ||
+        state->polygon_back_mode != POLY_MODE_FILL) {
+        return false;
+    }
+    switch (state->primitive_mode) {
+    case PRIM_TYPE_LINES:
+    case PRIM_TYPE_LINE_LOOP:
+    case PRIM_TYPE_LINE_STRIP:
+    case PRIM_TYPE_TRIANGLES:
+    case PRIM_TYPE_TRIANGLE_STRIP:
+    case PRIM_TYPE_TRIANGLE_FAN:
+        return true;
+    default:
+        return false;
+    }
+}
+
 #define VSH_UBO_BINDING 0
 #define PSH_UBO_BINDING 1
 #define PSH_TEX_BINDING 2
@@ -265,6 +299,13 @@ static void shader_cache_entry_init(Lru *lru, LruNode *node, const void *state)
     ShaderModuleCacheKey key;
 
     bool need_geometry_shader = pgraph_glsl_need_geom(&binding->state.geom);
+    if (need_geometry_shader && pgraph_vk_android_skip_geom(&binding->state.geom)) {
+        /* Mali fast path: native triangle/line topologies without a geometry
+         * shader. The vertex shader then feeds the fragment stage directly
+         * (same path as points); per-triangle depth/flat-shading extras from
+         * the geometry stage are approximated. */
+        need_geometry_shader = false;
+    }
     if (need_geometry_shader) {
         memset(&key, 0, sizeof(key));
         key.kind = VK_SHADER_STAGE_GEOMETRY_BIT;

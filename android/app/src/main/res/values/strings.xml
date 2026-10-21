@@ -77,4 +77,7 @@
     <string name="check_hdd">The HDD file is not a qcow2 image or is too small. Use xbox_hdd.qcow2 from the xemu project.</string>
     <string name="check_disc_redump">Full (Redump) disc image detected: the emulator will read its game partition directly (no conversion needed).</string>
     <string name="check_disc_unknown">Warning: no Xbox file system found in the game image. It may be corrupt or not an Xbox disc. Trying anyway…</string>
+    <string name="diag_section">Mali GPU diagnostics (applied on next Play)</string>
+    <string name="diag_no_geom">Fast path: no geometry shader for triangles (depth less precise)</string>
+    <string name="diag_no_border">Disable custom border color extension</string>
 </resources>

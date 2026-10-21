@@ -86,6 +86,8 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     private static final String PREF_INVERT_Y = "aim_invert_y";
     private static final String PREF_AIM_SENS = "aim_sensitivity_pct";
     private static final String PREF_ANTI_DZ = "aim_anti_deadzone_pct";
+    private static final String PREF_VK_NO_GEOM = "vk_no_geom";
+    private static final String PREF_VK_NO_BORDER = "vk_no_custom_border";
     private static final String FALLBACK_RAWG_API_KEY = "49a269369d354baa8d31978bb9e4b4a4";
     private static final int XDVD_SECTOR_SIZE = 2048;
     private static final byte[] XDVD_MAGIC = "MICROSOFT*XBOX*MEDIA".getBytes(StandardCharsets.US_ASCII);
@@ -401,6 +403,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
                 getCacheDir().getAbsolutePath(),
                 getApplicationInfo().nativeLibraryDir));
         reportPreviousCrash();
+        bindDiagnosticChecks();
         findViewById(R.id.shareLogButton).setOnClickListener(v -> shareRunLog());
         loadExistingFiles();
         scanSavedLibraryFolder(false);
@@ -1757,6 +1760,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
                     ") via " + discPath);
         }
         NativeBridge.nativeSetDiscOffset(launchDiscOffset);
+        applyRendererDiagnostics();
         String result = NativeBridge.nativeLaunch(
                 path(REQ_MCPX),
                 path(REQ_BIOS),
@@ -1939,6 +1943,28 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         };
         aimSensSeek.setOnSeekBarChangeListener(seekListener);
         antiDzSeek.setOnSeekBarChangeListener(seekListener);
+    }
+
+    /** Mali diagnostics: read by the xemu core through getenv() at renderer init. */
+    private void applyRendererDiagnostics() {
+        boolean noGeom = settingBoolean(PREF_VK_NO_GEOM, true);
+        boolean noBorder = settingBoolean(PREF_VK_NO_BORDER, false);
+        try {
+            android.system.Os.setenv("XEMU_ANDROID_VK_NO_GEOM", noGeom ? "1" : "0", true);
+            android.system.Os.setenv("XEMU_ANDROID_VK_NO_CUSTOM_BORDER", noBorder ? "1" : "0", true);
+        } catch (Exception e) {
+            appendLog("Unable to set renderer options: " + e.getMessage());
+        }
+        appendLog("Mali diagnostics: no geometry shader=" + noGeom + ", no custom border color=" + noBorder);
+    }
+
+    private void bindDiagnosticChecks() {
+        CheckBox noGeom = findViewById(R.id.vkNoGeomCheck);
+        CheckBox noBorder = findViewById(R.id.vkNoBorderCheck);
+        noGeom.setChecked(settingBoolean(PREF_VK_NO_GEOM, true));
+        noBorder.setChecked(settingBoolean(PREF_VK_NO_BORDER, false));
+        noGeom.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_VK_NO_GEOM, checked));
+        noBorder.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_VK_NO_BORDER, checked));
     }
 
     private void updateAimLabels() {

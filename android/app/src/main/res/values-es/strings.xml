@@ -27,4 +27,7 @@
     <string name="check_hdd">El archivo HDD no es una imagen qcow2 o es demasiado pequeño. Usa xbox_hdd.qcow2 del proyecto xemu.</string>
     <string name="check_disc_redump">Imagen completa tipo Redump detectada: el emulador leerá directamente la partición del juego (no hace falta convertirla).</string>
     <string name="check_disc_unknown">Aviso: no se encontró el sistema de archivos de Xbox en la imagen del juego. Puede estar dañada o no ser de Xbox. Intentando de todos modos…</string>
+    <string name="diag_section">Diagnóstico GPU Mali (se aplica al dar Play)</string>
+    <string name="diag_no_geom">Modo rápido: sin geometry shader en triángulos (profundidad menos precisa)</string>
+    <string name="diag_no_border">Desactivar extensión de color de borde personalizado</string>
 </resources>

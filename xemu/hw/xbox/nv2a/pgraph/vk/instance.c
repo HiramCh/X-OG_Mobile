@@ -334,7 +334,9 @@ static void add_optional_device_extension_names(
 {
     PGRAPHVkState *r = pg->vk_renderer_state;
 
+    const char *no_border = getenv("XEMU_ANDROID_VK_NO_CUSTOM_BORDER");
     r->custom_border_color_extension_enabled =
+        !(no_border && no_border[0] == '1') &&
         add_extension_if_available(available_extensions, enabled_extension_names,
                                    VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
 
