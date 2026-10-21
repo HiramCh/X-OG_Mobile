@@ -91,6 +91,8 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     private static final String PREF_VK_ROBUST = "vk_robust";
     private static final String PREF_VK_NO_QUERIES = "vk_no_queries";
     private static final String PREF_VK_AGGRESSIVE = "vk_aggressive";
+    private static final String PREF_STRETCH = "display_stretch";
+    private static final String PREF_WIDESCREEN = "guest_widescreen";
     private static final String FALLBACK_RAWG_API_KEY = "49a269369d354baa8d31978bb9e4b4a4";
     private static final int XDVD_SECTOR_SIZE = 2048;
     private static final byte[] XDVD_MAGIC = "MICROSOFT*XBOX*MEDIA".getBytes(StandardCharsets.US_ASCII);
@@ -1764,6 +1766,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         }
         NativeBridge.nativeSetDiscOffset(launchDiscOffset);
         applyRendererDiagnostics();
+        applyDisplayOptions();
         String result = NativeBridge.nativeLaunch(
                 path(REQ_MCPX),
                 path(REQ_BIOS),
@@ -1979,7 +1982,88 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
                 + ", no depth sync=" + noDepthSync + (aggressive ? " (aggressive mode)" : ""));
     }
 
+    /** Xbox EEPROM video flags (offset 0x94) and user-section checksum (0x60). */
+    private static final int EEPROM_SIZE = 256;
+    private static final int EEPROM_USER_CHECKSUM = 0x60;
+    private static final int EEPROM_USER_SECTION = 0x64;
+    private static final int EEPROM_USER_LEN = 0x5C;
+    private static final int EEPROM_VIDEO_FLAGS = 0x94;
+    private static final int VIDEO_WIDESCREEN = 0x00010000;
+    private static final int VIDEO_LETTERBOX = 0x00100000;
+
+    private static int readLe32(byte[] b, int off) {
+        return (b[off] & 0xff) | (b[off + 1] & 0xff) << 8 | (b[off + 2] & 0xff) << 16
+                | (b[off + 3] & 0xff) << 24;
+    }
+
+    private static void writeLe32(byte[] b, int off, int v) {
+        b[off] = (byte) v;
+        b[off + 1] = (byte) (v >>> 8);
+        b[off + 2] = (byte) (v >>> 16);
+        b[off + 3] = (byte) (v >>> 24);
+    }
+
+    /** Same as xemu's xbox_eeprom_crc(): 64-bit sum folded, inverted. */
+    private static int eepromCrc(byte[] b, int off, int len) {
+        long acc = 0;
+        for (int i = 0; i < len / 4; i++) {
+            acc += readLe32(b, off + i * 4) & 0xffffffffL;
+        }
+        long folded = (acc >>> 32) + (acc & 0xffffffffL);
+        return (int) ~folded;
+    }
+
+    /** Sets or clears the guest's 16:9 widescreen flag in xemu's EEPROM image. */
+    private void applyWidescreenEeprom(boolean widescreen) {
+        File eeprom = new File(getFilesDir(), "xemu-config/eeprom.bin");
+        if (!eeprom.isFile() || eeprom.length() != EEPROM_SIZE) {
+            if (widescreen) {
+                appendLog(getString(R.string.widescreen_next_launch));
+            }
+            return;
+        }
+        try {
+            byte[] b = new byte[EEPROM_SIZE];
+            try (FileInputStream in = new FileInputStream(eeprom)) {
+                if (in.read(b) != EEPROM_SIZE) {
+                    return;
+                }
+            }
+            int flags = readLe32(b, EEPROM_VIDEO_FLAGS);
+            int wanted = widescreen ? (flags | VIDEO_WIDESCREEN) & ~VIDEO_LETTERBOX
+                                    : flags & ~VIDEO_WIDESCREEN;
+            if (wanted == flags) {
+                return;
+            }
+            writeLe32(b, EEPROM_VIDEO_FLAGS, wanted);
+            writeLe32(b, EEPROM_USER_CHECKSUM, eepromCrc(b, EEPROM_USER_SECTION, EEPROM_USER_LEN));
+            try (FileOutputStream out = new FileOutputStream(eeprom)) {
+                out.write(b);
+            }
+            appendLog("Xbox video mode: " + (widescreen ? "widescreen 16:9" : "4:3"));
+        } catch (IOException e) {
+            appendLog("Unable to update EEPROM video flags: " + e.getMessage());
+        }
+    }
+
+    private void applyDisplayOptions() {
+        boolean stretch = settingBoolean(PREF_STRETCH, true);
+        try {
+            android.system.Os.setenv("XEMU_ANDROID_STRETCH", stretch ? "1" : "0", true);
+        } catch (Exception e) {
+            appendLog("Unable to set display options: " + e.getMessage());
+        }
+        applyWidescreenEeprom(settingBoolean(PREF_WIDESCREEN, true));
+    }
+
     private void bindDiagnosticChecks() {
+        CheckBox stretch = findViewById(R.id.stretchCheck);
+        CheckBox widescreen = findViewById(R.id.widescreenCheck);
+        stretch.setChecked(settingBoolean(PREF_STRETCH, true));
+        widescreen.setChecked(settingBoolean(PREF_WIDESCREEN, true));
+        stretch.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_STRETCH, checked));
+        widescreen.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_WIDESCREEN, checked));
+
         CheckBox noGeom = findViewById(R.id.vkNoGeomCheck);
         CheckBox noBorder = findViewById(R.id.vkNoBorderCheck);
         noGeom.setChecked(settingBoolean(PREF_VK_NO_GEOM, true));

@@ -181,6 +181,29 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
+                        android:text="@string/display_section"
+                        android:textColor="@color/text"
+                        android:textStyle="bold"
+                        android:textSize="13sp" />
+
+                    <CheckBox
+                        android:id="@+id/stretchCheck"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/display_stretch"
+                        android:textColor="@color/text" />
+
+                    <CheckBox
+                        android:id="@+id/widescreenCheck"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/display_widescreen"
+                        android:textColor="@color/text" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
                         android:text="@string/diag_section"
                         android:textColor="@color/text"
                         android:textStyle="bold"

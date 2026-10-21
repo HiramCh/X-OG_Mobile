@@ -1395,12 +1395,19 @@ static bool pgraph_vk_android_end_present_commands(PGRAPHState *pg,
         return false;
     }
 
+    /*
+     * No render_finished semaphore: the queue is drained right below
+     * (vkQueueWaitIdle), so the image is complete before vkQueuePresentKHR.
+     * Re-signalling one binary semaphore every frame, possibly while the
+     * presentation engine still holds the previous wait (or after a failed
+     * present left it signalled), wedged Mali's KCPU sync queues: periodic
+     * GROUP_ERROR_FATAL/TIMEOUT with ~8 s GPU resets.
+     */
+    (void)disp;
     VkSubmitInfo submit_info = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &cmd,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &disp->render_finished,
     };
     result = vkQueueSubmit(r->queue, 1, &submit_info, VK_NULL_HANDLE);
     if (result == VK_SUCCESS) {
@@ -1486,8 +1493,7 @@ static void pgraph_vk_android_present_placeholder(PGRAPHState *pg)
 
     VkPresentInfoKHR present_info = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &disp->render_finished,
+        .waitSemaphoreCount = 0, /* rendering already complete, see above */
         .swapchainCount = 1,
         .pSwapchains = &disp->swapchain,
         .pImageIndices = &image_index,
@@ -1567,7 +1573,12 @@ static void pgraph_vk_android_present(PGRAPHState *pg)
     uint32_t dst_x = 0;
     uint32_t dst_y = 0;
 
-    if (disp->width > 0 && disp->height > 0 &&
+    /* XEMU_ANDROID_STRETCH=1: fill the whole phone screen (e.g. 19:9),
+     * typically together with the guest's 16:9 widescreen mode. */
+    const char *stretch_env = getenv("XEMU_ANDROID_STRETCH");
+    bool stretch = stretch_env && stretch_env[0] == '1';
+
+    if (!stretch && disp->width > 0 && disp->height > 0 &&
         target_width > 0 && target_height > 0) {
         uint64_t target_times_source_h =
             (uint64_t)target_width * disp->height;
@@ -1649,8 +1660,7 @@ static void pgraph_vk_android_present(PGRAPHState *pg)
 
     VkPresentInfoKHR present_info = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &disp->render_finished,
+        .waitSemaphoreCount = 0, /* rendering already complete, see above */
         .swapchainCount = 1,
         .pSwapchains = &disp->swapchain,
         .pImageIndices = &image_index,

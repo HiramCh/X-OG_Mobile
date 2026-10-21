@@ -33,4 +33,8 @@
     <string name="diag_robust">Acceso seguro a buffers (evita fallos de memoria de la GPU)</string>
     <string name="diag_no_queries">Desactivar consultas de oclusión (todo se considera visible)</string>
     <string name="diag_aggressive">Modo agresivo Mali: activa todas las opciones de abajo y omite la sincronización de profundidad (tiene prioridad)</string>
+    <string name="display_section">Pantalla</string>
+    <string name="display_stretch">Pantalla completa (ocupar toda la pantalla del teléfono)</string>
+    <string name="display_widescreen">Modo panorámico 16:9 de la Xbox (los juegos dibujan en ancho, menos deformación)</string>
+    <string name="widescreen_next_launch">El modo panorámico se aplicará desde el siguiente arranque (la EEPROM de la Xbox se crea en el primero).</string>
 </resources>
