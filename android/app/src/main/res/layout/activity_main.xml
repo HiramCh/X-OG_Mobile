@@ -187,6 +187,14 @@
                         android:textSize="13sp" />
 
                     <CheckBox
+                        android:id="@+id/vkAggressiveCheck"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/diag_aggressive"
+                        android:textColor="@color/text"
+                        android:textStyle="bold" />
+
+                    <CheckBox
                         android:id="@+id/vkNoGeomCheck"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

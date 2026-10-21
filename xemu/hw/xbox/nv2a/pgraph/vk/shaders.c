@@ -56,6 +56,9 @@ bool pgraph_vk_android_skip_geom(const GeomState *state)
     case PRIM_TYPE_TRIANGLES:
     case PRIM_TYPE_TRIANGLE_STRIP:
     case PRIM_TYPE_TRIANGLE_FAN:
+    case PRIM_TYPE_QUADS:       /* drawn as indexed triangle lists, draw.c */
+    case PRIM_TYPE_QUAD_STRIP:  /* idem */
+    case PRIM_TYPE_POLYGON:     /* native triangle fan */
         return true;
     default:
         return false;

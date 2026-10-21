@@ -32,4 +32,5 @@
     <string name="diag_no_border">Desactivar extensión de color de borde personalizado</string>
     <string name="diag_robust">Acceso seguro a buffers (evita fallos de memoria de la GPU)</string>
     <string name="diag_no_queries">Desactivar consultas de oclusión (todo se considera visible)</string>
+    <string name="diag_aggressive">Modo agresivo Mali: activa todas las opciones de abajo y omite la sincronización de profundidad (tiene prioridad)</string>
 </resources>

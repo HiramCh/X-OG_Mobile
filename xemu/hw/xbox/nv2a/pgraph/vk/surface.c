@@ -478,6 +478,15 @@ static void download_surface(NV2AState *d, SurfaceBinding *surface, bool force)
         return;
     }
 
+    /* XEMU_ANDROID_VK_NO_DEPTH_SYNC=1: never read depth/stencil back into
+     * guest RAM (skips the compute pack shaders; few games read it). */
+    if (!surface->color &&
+        pgraph_vk_android_env_flag("XEMU_ANDROID_VK_NO_DEPTH_SYNC")) {
+        surface->download_pending = false;
+        surface->draw_dirty = false;
+        return;
+    }
+
     // FIXME: Respect write enable at last TOU?
 
     download_surface_to_buffer(d, surface, d->vram_ptr + surface->vram_addr);
@@ -967,6 +976,14 @@ void pgraph_vk_upload_surface_data(NV2AState *d, SurfaceBinding *surface,
     surface->draw_time = pg->draw_time;
 
     if (!surface->width || !surface->height) {
+        surface->initialized = true;
+        return;
+    }
+
+    /* XEMU_ANDROID_VK_NO_DEPTH_SYNC=1: do not upload depth/stencil from guest
+     * RAM (skips the compute unpack shaders); games clear depth themselves. */
+    if (!surface->color &&
+        pgraph_vk_android_env_flag("XEMU_ANDROID_VK_NO_DEPTH_SYNC")) {
         surface->initialized = true;
         return;
     }

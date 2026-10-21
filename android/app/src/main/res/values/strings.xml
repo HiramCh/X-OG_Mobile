@@ -82,4 +82,5 @@
     <string name="diag_no_border">Disable custom border color extension</string>
     <string name="diag_robust">Safe buffer access (avoids GPU memory faults)</string>
     <string name="diag_no_queries">Disable occlusion queries (all objects reported visible)</string>
+    <string name="diag_aggressive">Aggressive Mali mode: enables all options below and skips depth buffer sync (overrides them)</string>
 </resources>
