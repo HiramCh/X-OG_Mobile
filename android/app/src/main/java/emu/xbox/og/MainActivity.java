@@ -267,7 +267,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     }
 
     private void shareRunLog() {
-        String current = readRunLogTail("xemu-last-run.log", 300);
+        String current = readRunLogTail("xemu-last-run.log", 700);
         String previous = readRunLogTail("xemu-prev-run.log", 300);
         StringBuilder sb = new StringBuilder();
         sb.append("X-OG Mobile H2 ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
@@ -1965,6 +1965,8 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         }
         try {
             android.system.Os.setenv("XEMU_ANDROID_VK_NO_DEPTH_SYNC", noDepthSync ? "1" : "0", true);
+            // Per-second GPU work counters in the run log (matched with Mali fault times).
+            android.system.Os.setenv("XEMU_ANDROID_PROFILE", "1", true);
             android.system.Os.setenv("XEMU_ANDROID_VK_ROBUST", robust ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_VK_NO_QUERIES", noQueries ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_VK_NO_GEOM", noGeom ? "1" : "0", true);

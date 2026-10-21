@@ -39,10 +39,80 @@ void nv2a_profile_increment(void)
     }
 }
 
+/*
+ * XEMU_ANDROID_PROFILE=1: once per second (and for every frame slower than
+ * 500 ms) print the non-zero NV2A counters with a CLOCK_BOOTTIME stamp, the
+ * same clock as the kernel GPU fault lines ("[21402.685] ... GROUP_ERROR"),
+ * so faults can be matched with the work that preceded them.
+ */
+static void android_profile_frame(int64_t render_time_ms)
+{
+    static int enabled = -1;
+    static int sum[NV2A_PROF__COUNT];
+    static int frames, max_ms;
+    static double window_start;
+
+    if (enabled < 0) {
+        const char *v = getenv("XEMU_ANDROID_PROFILE");
+        enabled = v && v[0] == '1';
+    }
+    if (!enabled) {
+        return;
+    }
+
+    struct timespec ts;
+    clock_gettime(CLOCK_BOOTTIME, &ts);
+    double boot = ts.tv_sec + ts.tv_nsec / 1e9;
+    if (window_start == 0) {
+        window_start = boot;
+    }
+
+    const int *c = g_nv2a_stats.frame_working.counters;
+    if (render_time_ms > 500) {
+        char buf[1024];
+        int n = snprintf(buf, sizeof(buf), "[prof %.3f] SLOW frame %lldms:",
+                         boot, (long long)render_time_ms);
+        for (int i = 0; i < NV2A_PROF__COUNT && n < (int)sizeof(buf) - 40; i++) {
+            if (c[i]) {
+                n += snprintf(buf + n, sizeof(buf) - n, " %s=%d",
+                              nv2a_profile_get_counter_name(i), c[i]);
+            }
+        }
+        fprintf(stderr, "%s\n", buf);
+    }
+
+    for (int i = 0; i < NV2A_PROF__COUNT; i++) {
+        sum[i] += c[i];
+    }
+    frames++;
+    if (render_time_ms > max_ms) {
+        max_ms = render_time_ms;
+    }
+
+    if (boot - window_start >= 1.0) {
+        char buf[1024];
+        int n = snprintf(buf, sizeof(buf), "[prof %.3f] fps=%.1f max_ms=%d:",
+                         boot, frames / (boot - window_start), max_ms);
+        for (int i = 0; i < NV2A_PROF__COUNT && n < (int)sizeof(buf) - 40; i++) {
+            if (sum[i]) {
+                n += snprintf(buf + n, sizeof(buf) - n, " %s=%d",
+                              nv2a_profile_get_counter_name(i), sum[i]);
+            }
+        }
+        fprintf(stderr, "%s\n", buf);
+        memset(sum, 0, sizeof(sum));
+        frames = 0;
+        max_ms = 0;
+        window_start = boot;
+    }
+}
+
 void nv2a_profile_flip_stall(void)
 {
     int64_t now = qemu_clock_get_us(QEMU_CLOCK_REALTIME);
     int64_t render_time = (now-g_nv2a_stats.last_flip_time)/1000;
+
+    android_profile_frame(render_time);
 
     g_nv2a_stats.frame_working.mspf = render_time;
     g_nv2a_stats.frame_history[g_nv2a_stats.frame_ptr] =
