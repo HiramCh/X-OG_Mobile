@@ -18,7 +18,9 @@ thing stopping it. This patch, for the exact vendored build
 shaderClipDistance is not referenced by the Vulkan shader generator.
 Every patch checks the original bytes first and refuses on mismatch.
 
-usage: patch_core_mali.py <in.so> <out.so>
+usage: patch_core_mali.py [--optional] <in.so> <out.so>
+  --optional: if the library is not the known prebuilt build (e.g. a core
+  rebuilt from source with the fix), copy it unchanged instead of failing.
 """
 import hashlib
 import struct
@@ -52,8 +54,19 @@ TBZ = 0x36000000 | ((((0xAB16DC - 0xAB16AC) >> 2) & 0x3FFF) << 5) | 25
 PATCHES[1] = (PATCHES[1][0], PATCHES[1][1], struct.pack("<I", TBZ), PATCHES[1][3])
 
 
-def main(src, dst):
+def matches_known_build(data):
+    desc, off, old, new = PATCHES[0]
+    cur = bytes(data[off:off + len(old)])
+    return cur in (old, new)
+
+
+def main(src, dst, optional=False):
     data = bytearray(open(src, "rb").read())
+    if optional and not matches_known_build(data):
+        print("core is not the known prebuilt build; Mali binary patch not needed/applicable")
+        if src != dst:
+            open(dst, "wb").write(data)
+        return
     for desc, off, old, new in PATCHES:
         assert len(old) == len(new), desc
         cur = bytes(data[off:off + len(old)])
@@ -69,4 +82,7 @@ def main(src, dst):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    args = sys.argv[1:]
+    optional = "--optional" in args
+    args = [a for a in args if a != "--optional"]
+    main(args[0], args[1], optional)

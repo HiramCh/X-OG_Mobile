@@ -21,13 +21,17 @@ clang $T -std=c11 -O2 -fPIC -Wall -nostdlibinc -I"$A/cpp/c_bridge/include" -I"$A
   -c "$A/cpp/c_bridge/android_backend.c" -o "$B/bridge.o"
 clang $T -shared -nostdlib -fuse-ld=lld -Wl,-soname,libxboxemu_android.so -Wl,-z,max-page-size=16384 \
   -Wl,--hash-style=both -Wl,--build-id=sha1 -Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now \
-  "$B/bridge.o" -L"$B/stubs" -L"$A/jniLibs/arm64-v8a" -l:libxemu-core-i386.so \
+  "$B/bridge.o" -L"$B/stubs" -L"${CORE_DIR:-$A/jniLibs/arm64-v8a}" -l:libxemu-core-i386.so \
   -landroid -llog -lvulkan -ldl -lc -o "$B/lib/arm64-v8a/libxboxemu_android.so"
+# CORE_DIR: folder with a CI-built core (libxemu-core-i386.so, libqemu-system-i386.so,
+# libc++_shared.so). Default: the prebuilt libraries vendored in jniLibs.
+CORE_DIR="${CORE_DIR:-$A/jniLibs/arm64-v8a}"
 for f in libc++_shared.so libqemu-system-i386.so libxemu-core-i386.so; do
-  llvm-strip --strip-debug -o "$B/lib/arm64-v8a/$f" "$A/jniLibs/arm64-v8a/$f"
+  llvm-strip --strip-debug -o "$B/lib/arm64-v8a/$f" "$CORE_DIR/$f"
 done
-# Let the Vulkan renderer start on Mali GPUs (see tools/patch_core_mali.py)
-python3 -I "$ROOT/tools/patch_core_mali.py" "$B/lib/arm64-v8a/libxemu-core-i386.so" "$B/lib/arm64-v8a/libxemu-core-i386.so"
+# The vendored prebuilt core needs the Mali binary patch; a core built from
+# xemu/ already carries the source fix, so the patch is skipped there.
+python3 -I "$ROOT/tools/patch_core_mali.py" --optional "$B/lib/arm64-v8a/libxemu-core-i386.so" "$B/lib/arm64-v8a/libxemu-core-i386.so"
 
 # 2. Resources + manifest (application id emu.xbox.og.h2)
 python3 - "$A/AndroidManifest.xml" "$B/AndroidManifest.xml" <<'EOF'

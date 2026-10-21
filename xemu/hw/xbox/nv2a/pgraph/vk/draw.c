@@ -792,8 +792,11 @@ static void create_pipeline(PGRAPHState *pg)
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .depthClampEnable = VK_TRUE,
         .rasterizerDiscardEnable = VK_FALSE,
-        .polygonMode = pgraph_polygon_mode_vk_map[r->shader_binding->state
-                                                      .geom.polygon_front_mode],
+        .polygonMode =
+            r->enabled_physical_device_features.fillModeNonSolid == VK_TRUE ?
+                pgraph_polygon_mode_vk_map[r->shader_binding->state
+                                               .geom.polygon_front_mode] :
+                VK_POLYGON_MODE_FILL,
         .lineWidth = 1.0f,
         .frontFace = (pgraph_reg_r(pg, NV_PGRAPH_SETUPRASTER) &
                       NV_PGRAPH_SETUPRASTER_FRONTFACE) ?

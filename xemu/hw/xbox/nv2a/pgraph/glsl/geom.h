@@ -38,6 +38,9 @@ typedef struct {
 
 typedef struct GenGeomGlslOptions {
     bool vulkan;
+    /* Device lacks shaderTessellationAndGeometryPointSize (e.g. Mali):
+     * do not write gl_PointSize from the geometry stage. */
+    bool no_point_size;
 } GenGeomGlslOptions;
 
 void pgraph_glsl_set_geom_state(PGRAPHState *pg, GeomState *geom);

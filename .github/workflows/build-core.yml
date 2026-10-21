@@ -1,0 +1,64 @@
+name: Compilar núcleo xemu (Android arm64)
+
+# Recompila libxemu-core-i386.so desde xemu/ con el NDK r27c y publica las
+# librerías en una "Release" (core-<n>) para empaquetarlas en el APK.
+on:
+  push:
+    paths:
+      - "xemu/**"
+      - "tools/wsl-rebuild-core.sh"
+      - ".github/workflows/build-core.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Herramientas de compilación
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git curl unzip rsync cmake ninja-build python3 python3-venv \
+            pkg-config build-essential meson file zip autoconf automake libtool
+          df -h .
+
+      - name: Caché de NDK + vcpkg (glib, pixman, libsamplerate)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/xog-deps
+            ~/xog-dl
+          key: xog-deps-ndk-r27c-v1
+
+      - name: Compilar núcleo
+        run: bash tools/wsl-rebuild-core.sh
+
+      - name: Preparar librerías
+        run: |
+          J=android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p out
+          cp "$J/libxemu-core-i386.so" out/libxemu-core-i386.so
+          cp "$J/libqemu-system-i386.so" out/libqemu-system-i386.so
+          NDK_STRIP=~/xog-deps/android-ndk-r27c-linux/android-ndk-r27c/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
+          for f in out/*.so; do "$NDK_STRIP" --strip-debug "$f"; done
+          cp ~/xog-deps/android-ndk-r27c-linux/android-ndk-r27c/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so out/
+          (cd out && sha256sum *.so > SHA256SUMS && cat SHA256SUMS)
+          ls -lh out
+
+      - name: Publicar librerías
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: core-${{ github.run_number }}
+          name: Núcleo xemu Android ${{ github.run_number }} (${{ github.sha }})
+          prerelease: true
+          files: |
+            out/libxemu-core-i386.so
+            out/libqemu-system-i386.so
+            out/libc++_shared.so
+            out/SHA256SUMS

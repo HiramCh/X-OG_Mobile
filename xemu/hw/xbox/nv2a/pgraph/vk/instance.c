@@ -498,12 +498,15 @@ static bool create_logical_device(PGRAPHState *pg, Error **errp)
             .required = req, \
         }
         F(depthClamp, true),
-        F(fillModeNonSolid, true),
+        /* Optional for Mali-class GPUs: LINE/POINT polygon modes fall back
+         * to FILL (see draw.c), and geometry shaders skip gl_PointSize. */
+        F(fillModeNonSolid, false),
         F(geometryShader, true),
         F(occlusionQueryPrecise, true),
         F(samplerAnisotropy, false),
-        F(shaderClipDistance, true),
-        F(shaderTessellationAndGeometryPointSize, true),
+        /* Not referenced by the Vulkan shader generator. */
+        F(shaderClipDistance, false),
+        F(shaderTessellationAndGeometryPointSize, false),
         F(wideLines, false),
         #undef F
         // clang-format on

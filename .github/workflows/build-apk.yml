@@ -1,9 +1,7 @@
 name: Compilar APK (Halo 2 MTK)
 
-# Se ejecuta en cada push y también a mano desde la pestaña "Actions".
+# Solo manual: los APK de prueba se empaquetan con tools/build_apk_no_ndk.sh.
 on:
-  push:
-    branches: ["**"]
   workflow_dispatch:
 
 permissions:
