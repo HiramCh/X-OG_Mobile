@@ -40,6 +40,7 @@ jobs:
           sudo apt-get install -y -qq python3-pil || python3 -m pip install --quiet --break-system-packages pillow; python3 -c "import PIL; print(PIL.__version__)"
           python3 ../patches/gles_strict.py
           python3 ../patches/gles_stream_vbo.py
+          python3 ../patches/gles_no_geterror.py
           if [ "${{ matrix.app }}" = hakux ]; then
             python3 ../patches/hakux_mtk.py
             python3 ../patches/hakux_sharp_pad.py
