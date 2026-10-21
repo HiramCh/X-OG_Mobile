@@ -161,6 +161,12 @@ public class TouchControllerView extends View {
 
     private boolean editMode;
     private EditListener editListener;
+
+    // Free-screen "touch look" for FPS aiming (see AimController).
+    private AimController aim;
+    private int lookPointerId = MotionEvent.INVALID_POINTER_ID;
+    private float lookLastX, lookLastY;
+    private static final float LOOK_ZONE_START = 0.40f;
     private final Set<String> selected = new LinkedHashSet<>();
     private String pendingKey;
     private boolean longPressFired;
@@ -221,6 +227,69 @@ public class TouchControllerView extends View {
 
     void setListener(Listener listener) {
         this.listener = listener;
+    }
+
+    void setAimController(AimController aim) {
+        this.aim = aim;
+    }
+
+    private boolean hitsAnyControl(float x, float y) {
+        for (Btn b : buttons) {
+            if (b.contains(x, y)) {
+                return true;
+            }
+        }
+        float ddx = x - dpad.cx;
+        float ddy = y - dpad.cy;
+        if (ddx * ddx + ddy * ddy <= dpad.radius * dpad.radius) {
+            return true;
+        }
+        for (Stick s : new Stick[]{leftStick, rightStick}) {
+            float r = s.baseRadius * STICK_CAPTURE_SCALE;
+            float sx = x - s.cx;
+            float sy = y - s.cy;
+            if (sx * sx + sy * sy <= r * r) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void tryEngageLook(int pid, float x, float y) {
+        if (aim == null || !aim.isTouchEnabled() || lookPointerId != MotionEvent.INVALID_POINTER_ID) {
+            return;
+        }
+        if (pid == leftStick.activePointerId || pid == rightStick.activePointerId) {
+            return;
+        }
+        if (x < getWidth() * LOOK_ZONE_START || hitsAnyControl(x, y)) {
+            return;
+        }
+        lookPointerId = pid;
+        lookLastX = x;
+        lookLastY = y;
+    }
+
+    private void updateLook(MotionEvent event) {
+        if (lookPointerId == MotionEvent.INVALID_POINTER_ID || aim == null) {
+            return;
+        }
+        int idx = event.findPointerIndex(lookPointerId);
+        if (idx == -1) {
+            return;
+        }
+        float x = event.getX(idx);
+        float y = event.getY(idx);
+        aim.addTouchDelta(x - lookLastX, y - lookLastY);
+        lookLastX = x;
+        lookLastY = y;
+    }
+
+    private void releaseLook() {
+        lookPointerId = MotionEvent.INVALID_POINTER_ID;
+        if (aim != null) {
+            aim.releaseTouch();
+        }
     }
 
     // ---- Edit mode API (used by TouchLayoutEditorActivity) ----
@@ -592,6 +661,7 @@ public class TouchControllerView extends View {
         if (action == MotionEvent.ACTION_CANCEL) {
             releaseStick(leftStick);
             releaseStick(rightStick);
+            releaseLook();
             for (Btn b : buttons) {
                 setButtonPressed(b, false);
             }
@@ -607,10 +677,12 @@ public class TouchControllerView extends View {
             float y = event.getY(idx);
             tryEngageStick(leftStick, pid, x, y);
             tryEngageStick(rightStick, pid, x, y);
+            tryEngageLook(pid, x, y);
         }
 
         updateStick(leftStick, event);
         updateStick(rightStick, event);
+        updateLook(event);
 
         int upIndex = -1;
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
@@ -621,6 +693,9 @@ public class TouchControllerView extends View {
             }
             if (rightStick.activePointerId == upPid) {
                 releaseStick(rightStick);
+            }
+            if (lookPointerId == upPid) {
+                releaseLook();
             }
         }
 
@@ -633,7 +708,8 @@ public class TouchControllerView extends View {
                     continue;
                 }
                 int pid = event.getPointerId(i);
-                if (pid == leftStick.activePointerId || pid == rightStick.activePointerId) {
+                if (pid == leftStick.activePointerId || pid == rightStick.activePointerId
+                        || pid == lookPointerId) {
                     continue;
                 }
                 if (b.contains(event.getX(i), event.getY(i))) {
@@ -657,6 +733,9 @@ public class TouchControllerView extends View {
         float dy = y - s.cy;
         if (dx * dx + dy * dy <= captureR * captureR) {
             s.activePointerId = pid;
+            if (s == rightStick && aim != null) {
+                aim.setManualRightStick(true);
+            }
         }
     }
 
@@ -684,7 +763,8 @@ public class TouchControllerView extends View {
         s.offsetY = dy;
         if (listener != null) {
             listener.onTouchAxis(s.axisXId, dx / maxDist);
-            listener.onTouchAxis(s.axisYId, dy / maxDist);
+            // xemu expects stick Y positive when pushed up; screen y grows down.
+            listener.onTouchAxis(s.axisYId, -dy / maxDist);
         }
     }
 
@@ -698,7 +778,8 @@ public class TouchControllerView extends View {
                 continue;
             }
             int pid = event.getPointerId(i);
-            if (pid == leftStick.activePointerId || pid == rightStick.activePointerId) {
+            if (pid == leftStick.activePointerId || pid == rightStick.activePointerId
+                    || pid == lookPointerId) {
                 continue;
             }
             float dx = event.getX(i) - dpad.cx;
@@ -762,6 +843,9 @@ public class TouchControllerView extends View {
         if (listener != null) {
             listener.onTouchAxis(s.axisXId, 0f);
             listener.onTouchAxis(s.axisYId, 0f);
+        }
+        if (s == rightStick && aim != null) {
+            aim.setManualRightStick(false);
         }
     }
 

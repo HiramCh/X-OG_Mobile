@@ -8,11 +8,11 @@ android {
     ndkVersion "27.2.12479018"
 
     defaultConfig {
-        applicationId "emu.xbox.og"
+        applicationId "emu.xbox.og.h2"
         minSdk 29
         targetSdk 36
         versionCode 1
-        versionName "0.1.0"
+        versionName "0.1.0-h2mtk"
 
         ndk {
             abiFilters "arm64-v8a"

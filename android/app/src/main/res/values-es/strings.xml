@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="aim_section">Halo 2 / apuntado FPS</string>
+    <string name="halo2_preset">Aplicar perfil Halo 2 + MediaTek</string>
+    <string name="halo2_preset_applied">Perfil Halo 2 aplicado: Vulkan, sin animación de arranque, apuntado táctil y por giroscopio.</string>
+    <string name="touch_aim">Apuntar arrastrando el dedo en la parte derecha</string>
+    <string name="gyro_aim">Apuntar con giroscopio</string>
+    <string name="aim_invert_y">Invertir eje vertical</string>
+    <string name="aim_sensitivity">Sensibilidad de apuntado: %1$d%%</string>
+    <string name="aim_anti_deadzone">Compensación de zona muerta: %1$d%%</string>
+</resources>

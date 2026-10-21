@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">X-OG Mobile</string>
+    <string name="app_name">X-OG Mobile H2</string>
     <string name="pick_mcpx">Pick MCPX</string>
     <string name="pick_bios">Pick BIOS</string>
     <string name="pick_hdd">Pick HDD</string>
@@ -50,4 +50,12 @@
     <string name="label_spacing">Spacing</string>
     <string name="reset_layout">Reset layout</string>
     <string name="done">Done</string>
+    <string name="aim_section">Halo 2 / FPS aiming</string>
+    <string name="halo2_preset">Apply Halo 2 + MediaTek profile</string>
+    <string name="halo2_preset_applied">Halo 2 profile applied: Vulkan, skip boot animation, touch-look and gyro aiming.</string>
+    <string name="touch_aim">Aim by dragging on the right side of the screen</string>
+    <string name="gyro_aim">Aim with gyroscope</string>
+    <string name="aim_invert_y">Invert vertical aim</string>
+    <string name="aim_sensitivity">Aim sensitivity: %1$d%%</string>
+    <string name="aim_anti_deadzone">Dead zone compensation: %1$d%%</string>
 </resources>

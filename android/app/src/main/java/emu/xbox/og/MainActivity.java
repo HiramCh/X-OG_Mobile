@@ -80,6 +80,11 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     private static final String PREF_AVPACK = "avpack";
     private static final String PREF_AUTO_PAUSE_MS = "auto_pause_ms";
     private static final String PREF_RAWG_API_KEY = "rawg_api_key";
+    private static final String PREF_TOUCH_AIM = "touch_aim";
+    private static final String PREF_GYRO_AIM = "gyro_aim";
+    private static final String PREF_INVERT_Y = "aim_invert_y";
+    private static final String PREF_AIM_SENS = "aim_sensitivity_pct";
+    private static final String PREF_ANTI_DZ = "aim_anti_deadzone_pct";
     private static final String FALLBACK_RAWG_API_KEY = "49a269369d354baa8d31978bb9e4b4a4";
     private static final int XDVD_SECTOR_SIZE = 2048;
     private static final byte[] XDVD_MAGIC = "MICROSOFT*XBOX*MEDIA".getBytes(StandardCharsets.US_ASCII);
@@ -110,6 +115,14 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     private TextView volumeLabel;
     private CheckBox muteCheck;
     private CheckBox skipBootCheck;
+    private CheckBox touchAimCheck;
+    private CheckBox gyroAimCheck;
+    private CheckBox invertYCheck;
+    private SeekBar aimSensSeek;
+    private SeekBar antiDzSeek;
+    private TextView aimSensLabel;
+    private TextView antiDzLabel;
+    private AimController aim;
     private EditText rawgApiKeyInput;
     private TextureView renderSurface;
     private Surface currentSurface;
@@ -261,6 +274,17 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         gameInfoCredits = findViewById(R.id.gameInfoCredits);
         touchController = findViewById(R.id.touchController);
         touchController.setListener(this);
+        touchAimCheck = findViewById(R.id.touchAimCheck);
+        gyroAimCheck = findViewById(R.id.gyroAimCheck);
+        invertYCheck = findViewById(R.id.invertYCheck);
+        aimSensSeek = findViewById(R.id.aimSensSeek);
+        antiDzSeek = findViewById(R.id.antiDzSeek);
+        aimSensLabel = findViewById(R.id.aimSensLabel);
+        antiDzLabel = findViewById(R.id.antiDzLabel);
+        aim = new AimController(this, this::onAimAxis);
+        touchController.setAimController(aim);
+        applyAimSettings();
+        findViewById(R.id.halo2PresetButton).setOnClickListener(v -> applyHalo2Preset());
         pauseOverlay = findViewById(R.id.pauseOverlay);
         idleOverlay = findViewById(R.id.idleOverlay);
         fpsCounter = findViewById(R.id.fpsCounter);
@@ -342,6 +366,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         if (hasFocus) {
             enterImmersiveMode();
         }
+        syncAim();
     }
 
     private void bindSettingsControls() {
@@ -389,6 +414,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
             updateVolumeLabel();
             NativeBridge.nativeSetAudio(volumeSeek.getProgress(), isChecked);
         });
+        bindAimControls();
         skipBootCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (!settingsBinding) {
                 saveBoolean(PREF_SKIP_BOOT, isChecked);
@@ -1459,6 +1485,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         if (showOverlay) {
             showPauseOverlay();
         }
+        syncAim();
     }
 
     private void requestResume(String reason) {
@@ -1476,6 +1503,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         }
         hidePauseOverlay();
         noteGameInputActivity();
+        syncAim();
     }
 
     private void showPauseOverlay() {
@@ -1486,7 +1514,124 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         pauseOverlay.setVisibility(View.GONE);
     }
 
+    private void bindAimControls() {
+        if (touchAimCheck == null) {
+            return;
+        }
+        boolean wasBinding = settingsBinding;
+        settingsBinding = true;
+        touchAimCheck.setChecked(settingBoolean(PREF_TOUCH_AIM, true));
+        gyroAimCheck.setChecked(settingBoolean(PREF_GYRO_AIM, false));
+        gyroAimCheck.setEnabled(aim == null || aim.hasGyro());
+        invertYCheck.setChecked(settingBoolean(PREF_INVERT_Y, false));
+        aimSensSeek.setProgress(settingInt(PREF_AIM_SENS, 100) - 10);
+        antiDzSeek.setProgress(settingInt(PREF_ANTI_DZ, 18));
+        updateAimLabels();
+        settingsBinding = wasBinding;
+
+        touchAimCheck.setOnCheckedChangeListener((b, checked) -> {
+            if (!settingsBinding) {
+                saveBoolean(PREF_TOUCH_AIM, checked);
+                applyAimSettings();
+            }
+        });
+        gyroAimCheck.setOnCheckedChangeListener((b, checked) -> {
+            if (!settingsBinding) {
+                saveBoolean(PREF_GYRO_AIM, checked);
+                applyAimSettings();
+            }
+        });
+        invertYCheck.setOnCheckedChangeListener((b, checked) -> {
+            if (!settingsBinding) {
+                saveBoolean(PREF_INVERT_Y, checked);
+                applyAimSettings();
+            }
+        });
+        SeekBar.OnSeekBarChangeListener seekListener = new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (settingsBinding) {
+                    return;
+                }
+                if (seekBar == aimSensSeek) {
+                    saveInt(PREF_AIM_SENS, progress + 10);
+                } else {
+                    saveInt(PREF_ANTI_DZ, progress);
+                }
+                updateAimLabels();
+                applyAimSettings();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        };
+        aimSensSeek.setOnSeekBarChangeListener(seekListener);
+        antiDzSeek.setOnSeekBarChangeListener(seekListener);
+    }
+
+    private void updateAimLabels() {
+        aimSensLabel.setText(getString(R.string.aim_sensitivity, settingInt(PREF_AIM_SENS, 100)));
+        antiDzLabel.setText(getString(R.string.aim_anti_deadzone, settingInt(PREF_ANTI_DZ, 18)));
+    }
+
+    private void applyAimSettings() {
+        if (aim == null) {
+            return;
+        }
+        aim.configure(
+                settingBoolean(PREF_TOUCH_AIM, true),
+                settingBoolean(PREF_GYRO_AIM, false),
+                settingBoolean(PREF_INVERT_Y, false),
+                settingInt(PREF_AIM_SENS, 100) / 100f,
+                settingInt(PREF_ANTI_DZ, 18) / 100f);
+    }
+
+    /**
+     * One-tap setup for Halo 2 on mid-range MediaTek (Mali GPU) phones:
+     * Vulkan renderer (the only full-speed path in this core), skip the
+     * Xbox boot animation, HDTV pack, touch-look aiming with Halo's dead
+     * zone compensated, gyro on when the phone has one.
+     */
+    private void applyHalo2Preset() {
+        saveString(PREF_RENDERER, "vulkan");
+        saveBoolean(PREF_SKIP_BOOT, true);
+        saveString(PREF_AVPACK, "hdtv");
+        saveBoolean(PREF_TOUCH_AIM, true);
+        saveBoolean(PREF_GYRO_AIM, aim != null && aim.hasGyro());
+        saveBoolean(PREF_INVERT_Y, false);
+        saveInt(PREF_AIM_SENS, 110);
+        saveInt(PREF_ANTI_DZ, 20);
+        bindSettingsControls();
+        applyAimSettings();
+        appendLog(getString(R.string.halo2_preset_applied));
+    }
+
+    private void onAimAxis(int axis, float value) {
+        if (emulationPaused || !NativeBridge.nativeIsRunning()) {
+            return;
+        }
+        if (value != 0f) {
+            noteGameInputActivity();
+        }
+        NativeBridge.nativeSetAxis(axis, value);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void syncAim() {
+        if (aim == null) {
+            return;
+        }
+        aim.setDisplayRotation(getWindowManager().getDefaultDisplay().getRotation());
+        aim.setRunning(NativeBridge.nativeIsRunning() && !emulationPaused && hasWindowFocus());
+    }
+
     private void updateEmulationUi() {
+        syncAim();
         boolean running = NativeBridge.nativeIsRunning();
         idleOverlay.setVisibility(running ? View.GONE : View.VISIBLE);
         touchController.setVisibility(running ? View.VISIBLE : View.GONE);
@@ -1658,6 +1803,9 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     @Override
     protected void onPause() {
         super.onPause();
+        if (aim != null) {
+            aim.setRunning(false);
+        }
         Log.i(TAG, "Activity onPause: running=" + NativeBridge.nativeIsRunning()
                 + " emulationPaused=" + emulationPaused);
         if (NativeBridge.nativeIsRunning()) {
