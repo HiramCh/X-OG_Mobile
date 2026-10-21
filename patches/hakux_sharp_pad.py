@@ -156,3 +156,45 @@ sub(I, '''        if (!handled) {
         }
 #endif''')
 print("hakux_sharp_pad applied")
+
+# --- USB/Bluetooth pads: let Android's own input stack deliver them to SDL
+# (SDL's HIDAPI path would claim the USB device itself), and log devices.
+sub(J + "MainActivity.kt", '''    SDLActivity.nativeSetenv("SDL_ANDROID_TRAP_BACK_BUTTON", "1")''',
+    '''    SDLActivity.nativeSetenv("SDL_ANDROID_TRAP_BACK_BUTTON", "1")
+    SDLActivity.nativeSetenv("SDL_JOYSTICK_HIDAPI", "0")''')
+sub(J + "MainActivity.kt", '''  private fun checkForPhysicalControllers() {
+    val deviceIds = inputManager?.inputDeviceIds ?: return''', '''  private fun checkForPhysicalControllers() {
+    val deviceIds = inputManager?.inputDeviceIds ?: return
+    for (id in deviceIds) {
+      val dev = inputManager?.getInputDevice(id) ?: continue
+      android.util.Log.i("hakuX", "input device id=$id name='${dev.name}' " +
+        "vendor=0x${Integer.toHexString(dev.vendorId)} product=0x${Integer.toHexString(dev.productId)} " +
+        "sources=0x${Integer.toHexString(dev.sources)} virtual=${dev.isVirtual} " +
+        "controller=${isGameController(dev)}")
+    }''')
+sub(J + "MainActivity.kt", '''  override fun onInputDeviceAdded(deviceId: Int) {
+    val device = inputManager?.getInputDevice(deviceId)''', '''  override fun onInputDeviceAdded(deviceId: Int) {
+    val device = inputManager?.getInputDevice(deviceId)
+    android.util.Log.i("hakuX", "input device added id=$deviceId name='${device?.name}' " +
+      "sources=0x${Integer.toHexString(device?.sources ?: 0)} controller=${isGameController(device)}")''')
+sub(I, '''#include "xemu-input.h"''', '''#include "xemu-input.h"
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif''')
+sub(I, '''        sdl_con = SDL_GameControllerOpen(event->cdevice.which);
+        if (sdl_con == NULL) {''', '''        sdl_con = SDL_GameControllerOpen(event->cdevice.which);
+#ifdef __ANDROID__
+        __android_log_print(ANDROID_LOG_INFO, "hakuX",
+                            "input: SDL controller added index=%d name='%s' open=%s",
+                            event->cdevice.which,
+                            SDL_JoystickNameForIndex(event->cdevice.which) ?: "?",
+                            sdl_con ? "ok" : SDL_GetError());
+#endif
+        if (sdl_con == NULL) {''')
+s = open(I, encoding="utf-8").read()
+s = s.replace('''            fprintf(stderr, "input: physical controller '%s' bound to port 1\\n",
+                    new_con->name);''', '''            __android_log_print(ANDROID_LOG_INFO, "hakuX",
+                                "input: physical controller '%s' bound to port 1",
+                                jname ? jname : new_con->name);''')
+open(I, "w", encoding="utf-8").write(s)
+print("usb pad + logging applied")
