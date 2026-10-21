@@ -41,6 +41,7 @@ jobs:
           python3 ../patches/gles_strict.py
           python3 ../patches/gles_stream_vbo.py
           python3 ../patches/gles_no_geterror.py
+          python3 ../patches/gles_gpu_downscale.py
           if [ "${{ matrix.app }}" = hakux ]; then
             python3 ../patches/hakux_mtk.py
             python3 ../patches/hakux_sharp_pad.py
