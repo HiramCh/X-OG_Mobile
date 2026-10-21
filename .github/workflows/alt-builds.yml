@@ -49,12 +49,13 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@v3
-
       - name: SDK / NDK / CMake
         run: |
-          yes | sdkmanager --licenses > /dev/null
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.1.0" "cmake;3.30.3" "ndk;29.0.14206865" > /dev/null
+          export ANDROID_SDK_ROOT=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          SM=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager
+          yes | $SM --licenses > /dev/null || true
+          $SM "platform-tools" "platforms;android-36" "build-tools;36.1.0" "cmake;3.30.3" "ndk;29.0.14206865" >> $GITHUB_WORKSPACE/build.log 2>&1 || { tail -50 $GITHUB_WORKSPACE/build.log; exit 1; }
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/29.0.14206865" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/29.0.14206865" >> $GITHUB_ENV
 
@@ -79,9 +80,18 @@ jobs:
           printf 'org.gradle.jvmargs=-Xmx6g -Dfile.encoding=UTF-8\norg.gradle.daemon=false\n' > ~/.gradle/gradle.properties
           rm -f key.properties
           chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease 2>&1 | tee $GITHUB_WORKSPACE/build.log
+          test ${PIPESTATUS[0]} -eq 0
           find app/build/outputs/apk -name '*.apk' -exec ls -la {} \;
           cp "$(find app/build/outputs/apk/release -name '*.apk' | head -1)" "$GITHUB_WORKSPACE/${{ matrix.app }}-h2mtk-unsigned.apk"
+
+      - name: Publish failure log
+        if: failure()
+        run: |
+          touch build.log; tail -c 60000 build.log > ${{ matrix.app }}-fail.log
+          gh release create alt-log-${{ matrix.app }}-${{ github.run_number }} ${{ matrix.app }}-fail.log --prerelease --target ${{ github.sha }} -t log -n log -R ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish
         uses: softprops/action-gh-release@v2
