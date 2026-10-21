@@ -1,0 +1,93 @@
+name: Alternative emulator builds (hakuX / X1 BOX, Mali MTK)
+
+on:
+  push:
+    branches: [mtk-alt]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: hakux
+            repo: rfandango/hakuX
+            rev: e64e336d27dc8a56b67f441ec36bfddc1379cb6e
+          - app: x1box
+            repo: WinDroidEmulation/x1-box
+            rev: 4eed5f7c840073e14bf46dcd49170a20b4d5d1d0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch emulator source
+        run: |
+          git init src && cd src
+          git remote add origin https://github.com/${{ matrix.repo }}
+          git fetch --depth 1 origin ${{ matrix.rev }}
+          git checkout -q FETCH_HEAD
+          git clone -q https://github.com/xemu-project/nv2a_vsh_cpu subprojects/nv2a_vsh_cpu
+          git -C subprojects/nv2a_vsh_cpu checkout -q 561fe80da57a881f89000256b459440c0178a7ce || true
+
+      - name: Apply MTK patch
+        working-directory: src
+        run: |
+          if [ "${{ matrix.app }}" = hakux ]; then
+            python3 ../patches/hakux_mtk.py
+          else
+            sed -i 's/applicationId = "com.izzy2lost.x1box"/applicationId = "com.izzy2lost.x1box.h2mtk"/; s/versionName = "1.2.5"/versionName = "1.2.5-h2mtk"/' android/app/build.gradle.kts
+            grep -n 'applicationId\|versionName' android/app/build.gradle.kts
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: SDK / NDK / CMake
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.1.0" "cmake;3.30.3" "ndk;29.0.14206865" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/29.0.14206865" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/29.0.14206865" >> $GITHUB_ENV
+
+      - name: Host tools + Rust
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build meson pkg-config python3-setuptools
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          $HOME/.cargo/bin/rustup target add aarch64-linux-android
+          N=$ANDROID_SDK_ROOT/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin
+          echo "CC_aarch64_linux_android=$N/aarch64-linux-android26-clang" >> $GITHUB_ENV
+          echo "CXX_aarch64_linux_android=$N/aarch64-linux-android26-clang++" >> $GITHUB_ENV
+          echo "AR_aarch64_linux_android=$N/llvm-ar" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$N/aarch64-linux-android26-clang" >> $GITHUB_ENV
+
+      - name: Gradle build (release, unsigned)
+        working-directory: src/android
+        run: |
+          for f in gradle.properties ../gradle.properties; do [ -f "$f" ] && sed -i '/org\.gradle\.java\.home/d' "$f"; done
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx6g -Dfile.encoding=UTF-8\norg.gradle.daemon=false\n' > ~/.gradle/gradle.properties
+          rm -f key.properties
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleRelease
+          find app/build/outputs/apk -name '*.apk' -exec ls -la {} \;
+          cp "$(find app/build/outputs/apk/release -name '*.apk' | head -1)" "$GITHUB_WORKSPACE/${{ matrix.app }}-h2mtk-unsigned.apk"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: alt-${{ matrix.app }}-${{ github.run_number }}
+          name: alt-${{ matrix.app }}-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          files: ${{ matrix.app }}-h2mtk-unsigned.apk
