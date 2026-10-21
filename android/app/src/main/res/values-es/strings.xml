@@ -30,4 +30,6 @@
     <string name="diag_section">Diagnóstico GPU Mali (se aplica al dar Play)</string>
     <string name="diag_no_geom">Modo rápido: sin geometry shader en triángulos (profundidad menos precisa)</string>
     <string name="diag_no_border">Desactivar extensión de color de borde personalizado</string>
+    <string name="diag_robust">Acceso seguro a buffers (evita fallos de memoria de la GPU)</string>
+    <string name="diag_no_queries">Desactivar consultas de oclusión (todo se considera visible)</string>
 </resources>

@@ -24,6 +24,12 @@
 
 #include <stdlib.h>
 
+bool pgraph_vk_android_env_flag(const char *name)
+{
+    const char *v = getenv(name);
+    return v && v[0] == '1';
+}
+
 /* XEMU_ANDROID_VK_NO_GEOM=1: skip the geometry shader for primitives that
  * have a native Vulkan topology (GPUs such as Mali run geometry shaders very
  * slowly or fault on them). Quads, quad strips, polygons and non-fill

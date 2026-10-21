@@ -80,4 +80,6 @@
     <string name="diag_section">Mali GPU diagnostics (applied on next Play)</string>
     <string name="diag_no_geom">Fast path: no geometry shader for triangles (depth less precise)</string>
     <string name="diag_no_border">Disable custom border color extension</string>
+    <string name="diag_robust">Safe buffer access (avoids GPU memory faults)</string>
+    <string name="diag_no_queries">Disable occlusion queries (all objects reported visible)</string>
 </resources>

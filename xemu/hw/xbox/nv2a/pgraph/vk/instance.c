@@ -510,6 +510,7 @@ static bool create_logical_device(PGRAPHState *pg, Error **errp)
         F(shaderClipDistance, false),
         F(shaderTessellationAndGeometryPointSize, false),
         F(wideLines, false),
+        F(robustBufferAccess, false),
         #undef F
         // clang-format on
     };
@@ -524,6 +525,17 @@ static bool create_logical_device(PGRAPHState *pg, Error **errp)
             all_required_features_available = false;
         }
         *desired_features[i].enabled = desired_features[i].available;
+    }
+
+    /* XEMU_ANDROID_VK_ROBUST=1 keeps robustBufferAccess (out-of-bounds shader
+     * buffer accesses become safe instead of GPU page faults); otherwise it
+     * stays off as in upstream, since it costs some performance. */
+    if (!pgraph_vk_android_env_flag("XEMU_ANDROID_VK_ROBUST")) {
+        r->enabled_physical_device_features.robustBufferAccess = VK_FALSE;
+    } else {
+        fprintf(stderr, "Vulkan: robustBufferAccess %s\n",
+                r->enabled_physical_device_features.robustBufferAccess ?
+                    "enabled" : "requested but unsupported");
     }
 
     if (!all_required_features_available) {

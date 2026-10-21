@@ -200,6 +200,20 @@
                         android:text="@string/diag_no_border"
                         android:textColor="@color/text" />
 
+                    <CheckBox
+                        android:id="@+id/vkRobustCheck"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/diag_robust"
+                        android:textColor="@color/text" />
+
+                    <CheckBox
+                        android:id="@+id/vkNoQueriesCheck"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/diag_no_queries"
+                        android:textColor="@color/text" />
+
                     <Button
                         android:id="@+id/shareLogButton"
                         android:layout_width="match_parent"

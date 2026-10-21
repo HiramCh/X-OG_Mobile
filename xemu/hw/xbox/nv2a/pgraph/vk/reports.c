@@ -129,7 +129,9 @@ void pgraph_vk_process_pending_reports_internal(NV2AState *d)
         } else {
             pgraph_write_zpass_pixel_cnt_report(
                 d, report->parameter,
-                r->zpass_pixel_count_result / result_divisor);
+                pgraph_vk_android_env_flag("XEMU_ANDROID_VK_NO_QUERIES") ?
+                    640 * 480 :
+                    r->zpass_pixel_count_result / result_divisor);
         }
 
         QSIMPLEQ_REMOVE_HEAD(&r->report_queue, entry);

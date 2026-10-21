@@ -621,5 +621,6 @@ void pgraph_vk_determine_gpu_properties(NV2AState *d);
 GPUProperties *pgraph_vk_get_gpu_properties(void);
 
 bool pgraph_vk_android_skip_geom(const GeomState *state);
+bool pgraph_vk_android_env_flag(const char *name);
 
 #endif

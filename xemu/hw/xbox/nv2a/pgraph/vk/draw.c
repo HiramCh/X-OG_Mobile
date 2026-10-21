@@ -1412,8 +1412,21 @@ static void begin_draw(PGRAPHState *pg)
 
     assert(r->in_command_buffer);
 
-    // Visibility testing
-    if (!pg->clearing && pg->zpass_pixel_count_enable) {
+    // Visibility testing (XEMU_ANDROID_VK_NO_QUERIES=1 skips occlusion
+    // queries; reports then claim every pixel passed, see reports.c)
+    static int no_queries = -1;
+    if (no_queries < 0) {
+        no_queries = pgraph_vk_android_env_flag("XEMU_ANDROID_VK_NO_QUERIES");
+        if (no_queries) {
+            fprintf(stderr, "Vulkan: occlusion queries disabled\n");
+        }
+    }
+    if (no_queries) {
+        if (r->query_in_flight) {
+            end_render_pass(r);
+            end_query(r);
+        }
+    } else if (!pg->clearing && pg->zpass_pixel_count_enable) {
         if (r->new_query_needed && r->query_in_flight) {
             end_render_pass(r);
             end_query(r);

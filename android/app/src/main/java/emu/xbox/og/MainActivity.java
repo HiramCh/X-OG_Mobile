@@ -88,6 +88,8 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     private static final String PREF_ANTI_DZ = "aim_anti_deadzone_pct";
     private static final String PREF_VK_NO_GEOM = "vk_no_geom";
     private static final String PREF_VK_NO_BORDER = "vk_no_custom_border";
+    private static final String PREF_VK_ROBUST = "vk_robust";
+    private static final String PREF_VK_NO_QUERIES = "vk_no_queries";
     private static final String FALLBACK_RAWG_API_KEY = "49a269369d354baa8d31978bb9e4b4a4";
     private static final int XDVD_SECTOR_SIZE = 2048;
     private static final byte[] XDVD_MAGIC = "MICROSOFT*XBOX*MEDIA".getBytes(StandardCharsets.US_ASCII);
@@ -1949,13 +1951,18 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     private void applyRendererDiagnostics() {
         boolean noGeom = settingBoolean(PREF_VK_NO_GEOM, true);
         boolean noBorder = settingBoolean(PREF_VK_NO_BORDER, false);
+        boolean robust = settingBoolean(PREF_VK_ROBUST, true);
+        boolean noQueries = settingBoolean(PREF_VK_NO_QUERIES, false);
         try {
+            android.system.Os.setenv("XEMU_ANDROID_VK_ROBUST", robust ? "1" : "0", true);
+            android.system.Os.setenv("XEMU_ANDROID_VK_NO_QUERIES", noQueries ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_VK_NO_GEOM", noGeom ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_VK_NO_CUSTOM_BORDER", noBorder ? "1" : "0", true);
         } catch (Exception e) {
             appendLog("Unable to set renderer options: " + e.getMessage());
         }
-        appendLog("Mali diagnostics: no geometry shader=" + noGeom + ", no custom border color=" + noBorder);
+        appendLog("Mali diagnostics: no geometry shader=" + noGeom + ", no custom border color=" + noBorder
+                + ", robust buffers=" + robust + ", no occlusion queries=" + noQueries);
     }
 
     private void bindDiagnosticChecks() {
@@ -1965,6 +1972,12 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         noBorder.setChecked(settingBoolean(PREF_VK_NO_BORDER, false));
         noGeom.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_VK_NO_GEOM, checked));
         noBorder.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_VK_NO_BORDER, checked));
+        CheckBox robust = findViewById(R.id.vkRobustCheck);
+        CheckBox noQueries = findViewById(R.id.vkNoQueriesCheck);
+        robust.setChecked(settingBoolean(PREF_VK_ROBUST, true));
+        noQueries.setChecked(settingBoolean(PREF_VK_NO_QUERIES, false));
+        robust.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_VK_ROBUST, checked));
+        noQueries.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_VK_NO_QUERIES, checked));
     }
 
     private void updateAimLabels() {
