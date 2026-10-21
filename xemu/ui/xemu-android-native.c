@@ -112,7 +112,18 @@ uint32_t xemu_android_get_native_window_generation(void)
 
 static void xemu_android_vlog(int prio, const char *fmt, va_list ap)
 {
+    /* Mirror warnings (and swapchain/present info) to stderr, which the app
+     * stores in its shareable run log; logcat alone is unreachable for users. */
+    va_list ap2;
+    va_copy(ap2, ap);
     __android_log_vprint(prio, "X-OG Mobile", fmt, ap);
+    if (prio >= ANDROID_LOG_WARN || strstr(fmt, "swapchain") ||
+        strstr(fmt, "presented")) {
+        fprintf(stderr, prio >= ANDROID_LOG_WARN ? "[warn] " : "[info] ");
+        vfprintf(stderr, fmt, ap2);
+        fputc('\n', stderr);
+    }
+    va_end(ap2);
 }
 
 void xemu_android_log_info(const char *fmt, ...)

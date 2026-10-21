@@ -1290,6 +1290,23 @@ static bool pgraph_vk_android_create_swapchain(PGRAPHState *pg)
                               caps.maxImageExtent.height);
     }
 
+    /* Android reports currentExtent in the display's natural (portrait)
+     * orientation plus a ROTATE_90/270 currentTransform while the app is in
+     * landscape. We never pre-rotate our blit, so ask for a landscape-sized
+     * swapchain with IDENTITY and let the compositor rotate it; otherwise
+     * the picture came out sideways/stretched with SurfaceView. */
+    VkSurfaceTransformFlagBitsKHR pre_transform = caps.currentTransform;
+    if ((caps.currentTransform & (VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR |
+                                  VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR)) &&
+        extent.width < extent.height) {
+        uint32_t tmp = extent.width;
+        extent.width = extent.height;
+        extent.height = tmp;
+    }
+    if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
+        pre_transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    }
+
     uint32_t image_count = MAX(2, caps.minImageCount + 1);
     if (caps.maxImageCount > 0) {
         image_count = MIN(image_count, caps.maxImageCount);
@@ -1306,7 +1323,7 @@ static bool pgraph_vk_android_create_swapchain(PGRAPHState *pg)
         .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .preTransform = caps.currentTransform,
+        .preTransform = pre_transform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = present_mode,
         .clipped = VK_TRUE,
@@ -1359,10 +1376,12 @@ static bool pgraph_vk_android_create_swapchain(PGRAPHState *pg)
     disp->swapchain_ready = true;
     disp->swapchain_window_generation =
         xemu_android_get_native_window_generation();
-    xemu_android_log_info("Android Vulkan swapchain ready: %ux%u images=%u format=%d presentMode=%d",
+    xemu_android_log_info("Android Vulkan swapchain ready: %ux%u images=%u format=%d presentMode=%d "
+                          "currentTransform=0x%x preTransform=0x%x currentExtent=%ux%u",
                           extent.width, extent.height,
                           disp->swapchain_image_count, chosen_format.format,
-                          present_mode);
+                          present_mode, caps.currentTransform, pre_transform,
+                          caps.currentExtent.width, caps.currentExtent.height);
     return true;
 }
 
