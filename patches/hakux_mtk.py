@@ -55,4 +55,41 @@ sub(J + "SettingsActivity.kt", '"aspect_ratio" to "auto"', '"aspect_ratio" to "f
 sub(J + "SettingsActivity.kt", 'setupStringPicker(R.id.btn_aspect_ratio, "aspect_ratio", "auto",',
     'setupStringPicker(R.id.btn_aspect_ratio, "aspect_ratio", "fit",')
 sub(CPP, 'std::string aspect_ratio = "auto";', 'std::string aspect_ratio = "fit";')
+# Mali: finish the frame before swapping (X1 BOX "Mali Mediatek fixes",
+# commit 02bcd8dd). Without it the display context can sample the NV2A
+# frame before the Mali GPU has written it -> black screen with sound.
+X = "ui/xemu.c"
+sub(X, "static bool g_android_gl_bgra_supported = true;",
+    "static bool g_android_gl_bgra_supported = true;\nstatic bool g_android_force_finish_before_swap = false;")
+sub(X, """                            "GL_EXT_texture_format_BGRA8888=%s",
+                            g_android_gl_bgra_supported ? "yes" : "no");
+""", """                            "GL_EXT_texture_format_BGRA8888=%s",
+                            g_android_gl_bgra_supported ? "yes" : "no");
+        if ((vendor && strstr(vendor, "ARM")) ||
+            (renderer && strstr(renderer, "Mali"))) {
+            g_android_force_finish_before_swap = true;
+            __android_log_print(ANDROID_LOG_INFO, "hakuX",
+                                "Mali: glFinish before swap enabled");
+        }
+""")
+sub(X, """#ifdef __ANDROID__
+    glFlush();
+#else
+    glFinish();
+#endif
+    nv2a_release_framebuffer_surface();""", """#ifdef __ANDROID__
+    if (g_android_force_finish_before_swap) {
+        glFinish();
+    } else {
+        glFlush();
+    }
+#else
+    glFinish();
+#endif
+    nv2a_release_framebuffer_surface();""")
+
+# exported log: also keep warnings/errors from the GPU driver and the rest
+sub(J + "HakuXApplication.kt", '"EGL:W", "Vulkan:V",',
+    '"EGL:W", "Vulkan:V", "libEGL:V", "GLES:V", "mali:V", "Mali:V", "OpenGLRenderer:W", "SDL:V", "xemu-android:V",')
+sub(J + "HakuXApplication.kt", '"*:S"', '"*:W"')
 print("hakuX MTK patch applied")
