@@ -1524,7 +1524,11 @@ static void pgraph_vk_android_present_placeholder(PGRAPHState *pg)
         .pImageIndices = &image_index,
     };
     result = android_vkQueuePresentKHR(r->queue, &present_info);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    /* SUBOPTIMAL is expected: we present with IDENTITY and let the
+     * compositor rotate (currentTransform is ROTATE_90 in landscape).
+     * Recreating on it rebuilt the swapchain every frame. Size changes
+     * arrive as OUT_OF_DATE or a new native window generation instead. */
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         pgraph_vk_android_create_swapchain(pg);
         return;
     }
@@ -1691,7 +1695,11 @@ static void pgraph_vk_android_present(PGRAPHState *pg)
         .pImageIndices = &image_index,
     };
     result = android_vkQueuePresentKHR(r->queue, &present_info);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    /* SUBOPTIMAL is expected: we present with IDENTITY and let the
+     * compositor rotate (currentTransform is ROTATE_90 in landscape).
+     * Recreating on it rebuilt the swapchain every frame. Size changes
+     * arrive as OUT_OF_DATE or a new native window generation instead. */
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         pgraph_vk_android_create_swapchain(pg);
         return;
     }
