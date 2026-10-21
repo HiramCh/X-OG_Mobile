@@ -75,6 +75,6 @@
     <string name="check_mcpx_md5">Warning: MCPX checksum %1$s does not match a known MCPX 1.0/1.1 dump; it may be corrupt.</string>
     <string name="check_bios_size">BIOS must be 256 KB, 512 KB or 1 MB (yours: %1$d bytes). Re-import it.</string>
     <string name="check_hdd">The HDD file is not a qcow2 image or is too small. Use xbox_hdd.qcow2 from the xemu project.</string>
-    <string name="check_disc_redump">Warning: the game is a full (Redump) disc image, not an XISO. xemu needs XISO: convert it with extract-xiso. Trying anyway…</string>
+    <string name="check_disc_redump">Full (Redump) disc image detected: the emulator will read its game partition directly (no conversion needed).</string>
     <string name="check_disc_unknown">Warning: no Xbox file system found in the game image. It may be corrupt or not an Xbox disc. Trying anyway…</string>
 </resources>

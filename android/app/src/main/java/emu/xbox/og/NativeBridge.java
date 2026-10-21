@@ -25,6 +25,8 @@ final class NativeBridge {
     static native String nativeStop(int timeoutMs);
     static native boolean nativeIsRunning();
     static native boolean nativeIsCoreDead();
+    /** Byte offset of the game partition inside the disc image (0 for XISO). */
+    static native void nativeSetDiscOffset(long offset);
     // [produced, presented] cumulative counts; see xemu_android_get_frame_stats.
     static native long[] nativeGetFrameStats();
     // Diagnostic-only: logs QEMU runstate/vmstop/clock state to logcat.

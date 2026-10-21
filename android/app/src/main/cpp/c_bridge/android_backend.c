@@ -44,6 +44,7 @@ static char g_files_dir[PATH_BUF];
 static char g_cache_dir[PATH_BUF];
 static char g_native_lib_dir[PATH_BUF];
 static int g_disc_dup_fd = -1;
+static long long g_disc_offset; /* game partition offset inside the image (Redump) */
 static pthread_t g_xemu_thread;
 static int g_xemu_thread_valid;
 static int g_xemu_running; /* accessed with __atomic builtins */
@@ -466,7 +467,17 @@ Java_emu_xbox_og_NativeBridge_nativeLaunch(JNIEnv *env, jclass cls, jstring mcpx
         snprintf(buf, sizeof(buf), "fd=%d,set=%d", g_disc_dup_fd, DISC_FDSET_ID);
         push_arg(buf);
         push_arg("-dvd_path");
-        snprintf(buf, sizeof(buf), "/dev/fdset/%d", DISC_FDSET_ID);
+        if (g_disc_offset > 0) {
+            /* Full Redump image: expose only the XDVDFS game partition by
+             * wrapping the fd in QEMU's raw driver with an offset. */
+            snprintf(buf, sizeof(buf),
+                     "json:{\"driver\":\"raw\",\"offset\":%lld,"
+                     "\"file\":{\"driver\":\"file\",\"filename\":\"/dev/fdset/%d\"}}",
+                     g_disc_offset, DISC_FDSET_ID);
+            LOGI("Disc is a full image; game partition at offset %lld", g_disc_offset);
+        } else {
+            snprintf(buf, sizeof(buf), "/dev/fdset/%d", DISC_FDSET_ID);
+        }
         push_arg(buf);
         LOGI("Disc passed via duplicated fd=%d as /dev/fdset/%d", g_disc_dup_fd, DISC_FDSET_ID);
     }
@@ -625,6 +636,13 @@ Java_emu_xbox_og_NativeBridge_nativeIsRunning(JNIEnv *env, jclass cls) {
     (void) env;
     (void) cls;
     return running() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_emu_xbox_og_NativeBridge_nativeSetDiscOffset(JNIEnv *env, jclass cls, jlong offset) {
+    (void) env;
+    (void) cls;
+    g_disc_offset = offset > 0 ? (long long) offset : 0;
 }
 
 JNIEXPORT jboolean JNICALL

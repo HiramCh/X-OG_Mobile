@@ -1378,16 +1378,19 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     }
 
     private XdvdfsFile findDefaultXbe(FileChannel channel) throws IOException {
-        long[] descriptorOffsets = {0x10000L, 0x8000L, 0x20000L};
-        for (long descriptorOffset : descriptorOffsets) {
-            ByteBuffer descriptor = readBuffer(channel, descriptorOffset, XDVD_SECTOR_SIZE);
+        // base 0 = XISO / game-partition image; REDUMP_GAME_OFFSET = full Redump disc image.
+        long[][] probes = {{0L, 0x10000L}, {0L, 0x8000L}, {0L, 0x20000L},
+                {REDUMP_GAME_OFFSET, 0x10000L}};
+        for (long[] probe : probes) {
+            long base = probe[0];
+            ByteBuffer descriptor = readBuffer(channel, base + probe[1], XDVD_SECTOR_SIZE);
             if (descriptor == null || !matchesMagic(descriptor, 0)) {
                 continue;
             }
             long rootSector = uint32(descriptor, 20);
             long rootSize = uint32(descriptor, 24);
-            XdvdfsFile found = findDefaultXbeInDirectory(channel, rootSector * XDVD_SECTOR_SIZE,
-                    rootSize, 0);
+            XdvdfsFile found = findDefaultXbeInDirectory(channel, base,
+                    base + rootSector * XDVD_SECTOR_SIZE, rootSize, 0);
             if (found != null) {
                 return found;
             }
@@ -1395,7 +1398,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         return null;
     }
 
-    private XdvdfsFile findDefaultXbeInDirectory(FileChannel channel, long offset, long size,
+    private XdvdfsFile findDefaultXbeInDirectory(FileChannel channel, long base, long offset, long size,
                                                 int depth) throws IOException {
         if (depth > 5 || size <= 0 || size > 1024 * 1024) {
             return null;
@@ -1419,7 +1422,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
                 nameBytes[i] = dir.get(pos + 14 + i);
             }
             String name = new String(nameBytes, StandardCharsets.UTF_8);
-            long fileOffset = sector * XDVD_SECTOR_SIZE;
+            long fileOffset = base + sector * XDVD_SECTOR_SIZE;
             if ("default.xbe".equalsIgnoreCase(name)) {
                 return new XdvdfsFile(fileOffset, fileSize);
             }
@@ -1429,7 +1432,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
             pos += ((14 + nameLen + 3) / 4) * 4;
         }
         for (XdvdfsFile dirEntry : dirs) {
-            XdvdfsFile found = findDefaultXbeInDirectory(channel, dirEntry.offset, dirEntry.size,
+            XdvdfsFile found = findDefaultXbeInDirectory(channel, base, dirEntry.offset, dirEntry.size,
                     depth + 1);
             if (found != null) {
                 return found;
@@ -1576,8 +1579,11 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         return -1;
     }
 
+    private long launchDiscOffset;
+
     /** Returns false (and explains why) when launching would just make xemu exit. */
     private boolean preLaunchCheck() {
+        launchDiscOffset = 0;
         File mcpx = files.get(REQ_MCPX);
         File bios = files.get(REQ_BIOS);
         File hdd = files.get(REQ_HDD);
@@ -1603,6 +1609,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         }
         long volume = discVolumeOffset();
         if (volume == REDUMP_GAME_OFFSET) {
+            launchDiscOffset = REDUMP_GAME_OFFSET;
             appendLog(getString(R.string.check_disc_redump));
         } else if (volume < 0) {
             appendLog(getString(R.string.check_disc_unknown));
@@ -1749,6 +1756,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
             appendLog("DISC direct: " + discSelection.name + " (" + humanSize(discSelection.size) +
                     ") via " + discPath);
         }
+        NativeBridge.nativeSetDiscOffset(launchDiscOffset);
         String result = NativeBridge.nativeLaunch(
                 path(REQ_MCPX),
                 path(REQ_BIOS),
