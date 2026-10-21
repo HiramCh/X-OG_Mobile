@@ -73,3 +73,38 @@ if s.count(old) != 1:
 s = s.replace(old, new)
 open(p, "w", encoding="utf-8").write(s)
 print("gles_strict: GL_EXT_depth_clamp enabled when available")
+
+# Mali: geometry shaders are slow. On the GLES renderer depth comes from the
+# fixed-function pipeline (depth_needed is false), so for filled, smoothly
+# shaded triangles the GS only copies varyings. Skip it there; flat-shaded
+# triangles keep it so the provoking vertex stays correct.
+# XEMU_ANDROID_GLES_FORCE_GEOM=1 restores the old behaviour.
+p = "hw/xbox/nv2a/pgraph/gl/shaders.c"
+s = open(p, encoding="utf-8").read()
+old = '''    if (need_geometry_shader && !r->geometry_shaders_supported) {
+        need_geometry_shader = false;
+    }
+#endif'''
+new = '''    if (need_geometry_shader && !r->geometry_shaders_supported) {
+        need_geometry_shader = false;
+    }
+    if (need_geometry_shader &&
+        state->geom.primitive_mode == PRIM_TYPE_TRIANGLES &&
+        state->geom.polygon_front_mode == POLY_MODE_FILL &&
+        state->geom.polygon_back_mode == POLY_MODE_FILL &&
+        state->geom.smooth_shading) {
+        static int force_geom = -1;
+        if (force_geom < 0) {
+            const char *e = getenv("XEMU_ANDROID_GLES_FORCE_GEOM");
+            force_geom = (e && e[0] == '1') ? 1 : 0;
+        }
+        if (!force_geom) {
+            need_geometry_shader = false;
+        }
+    }
+#endif'''
+if s.count(old) != 1:
+    sys.exit("gles_strict: geometry pattern not found in " + p)
+s = s.replace(old, new)
+open(p, "w", encoding="utf-8").write(s)
+print("gles_strict: GS skipped for smooth filled triangles on GLES")
