@@ -96,7 +96,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, To
     private static final String PREF_WIDESCREEN = "guest_widescreen";
     private static final String PREF_ANISO = "texture_aniso16_v2";
     private static final String PREF_CPU_PRESENT = "cpu_present_v2";
-    private static final String PREF_PIXEL_DEPTH = "pixel_depth";
+    private static final String PREF_PIXEL_DEPTH = "pixel_depth_v2";
     private static final String FALLBACK_RAWG_API_KEY = "49a269369d354baa8d31978bb9e4b4a4";
     private static final int XDVD_SECTOR_SIZE = 2048;
     private static final byte[] XDVD_MAGIC = "MICROSOFT*XBOX*MEDIA".getBytes(StandardCharsets.US_ASCII);
@@ -2059,7 +2059,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, To
         try {
             android.system.Os.setenv("XEMU_ANDROID_STRETCH", stretch ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_PIXEL_DEPTH",
-                    settingBoolean(PREF_PIXEL_DEPTH, true) ? "1" : "0", true);
+                    settingBoolean(PREF_PIXEL_DEPTH, false) ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_CPU_PRESENT",
                     settingBoolean(PREF_CPU_PRESENT, false) ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_ANISO",
@@ -2074,7 +2074,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, To
         CheckBox stretch = findViewById(R.id.stretchCheck);
         CheckBox widescreen = findViewById(R.id.widescreenCheck);
         CheckBox pixelDepth = findViewById(R.id.pixelDepthCheck);
-        pixelDepth.setChecked(settingBoolean(PREF_PIXEL_DEPTH, true));
+        pixelDepth.setChecked(settingBoolean(PREF_PIXEL_DEPTH, false));
         pixelDepth.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_PIXEL_DEPTH, checked));
         CheckBox cpuPresent = findViewById(R.id.cpuPresentCheck);
         cpuPresent.setChecked(settingBoolean(PREF_CPU_PRESENT, false));
