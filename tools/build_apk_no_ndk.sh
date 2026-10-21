@@ -26,13 +26,15 @@ clang $T -shared -nostdlib -fuse-ld=lld -Wl,-soname,libxboxemu_android.so -Wl,-z
 for f in libc++_shared.so libqemu-system-i386.so libxemu-core-i386.so; do
   llvm-strip --strip-debug -o "$B/lib/arm64-v8a/$f" "$A/jniLibs/arm64-v8a/$f"
 done
+# Let the Vulkan renderer start on Mali GPUs (see tools/patch_core_mali.py)
+python3 -I "$ROOT/tools/patch_core_mali.py" "$B/lib/arm64-v8a/libxemu-core-i386.so" "$B/lib/arm64-v8a/libxemu-core-i386.so"
 
 # 2. Resources + manifest (application id emu.xbox.og.h2)
 python3 - "$A/AndroidManifest.xml" "$B/AndroidManifest.xml" <<'EOF'
 import sys
 s=open(sys.argv[1]).read()
 s=s.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
- '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="emu.xbox.og" android:versionCode="5" android:versionName="0.1.3-h2mtk">\n    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="36" />')
+ '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="emu.xbox.og" android:versionCode="6" android:versionName="0.1.4-h2mtk">\n    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="36" />')
 s=s.replace('android:name=".','android:name="emu.xbox.og.')
 s=s.replace('android:theme="@style/AppTheme">','android:theme="@style/AppTheme"\n        android:extractNativeLibs="true">')
 open(sys.argv[2],'w').write(s)
