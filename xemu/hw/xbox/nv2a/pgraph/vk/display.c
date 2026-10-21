@@ -1448,10 +1448,166 @@ static bool pgraph_vk_android_end_present_commands(PGRAPHState *pg,
     return true;
 }
 
+/*
+ * CPU presentation (XEMU_ANDROID_CPU_PRESENT=1, default on Mali).
+ *
+ * The 640x480 guest frame is copied to a host-visible buffer and written into
+ * the SurfaceView's ANativeWindow with ANativeWindow_lock/unlockAndPost; the
+ * compositor scales it to the full screen. No Vulkan swapchain exists in this
+ * mode, so the GPU queue never waits on compositor release fences: those
+ * waits timing out after 3 s (Mali SW_FAULT_2) were behind the remaining GPU
+ * resets, and a reset can also take down SystemUI's GPU context.
+ */
+static VkBuffer cpu_present_buffer;
+static VkDeviceMemory cpu_present_memory;
+static void *cpu_present_map;
+static VkDeviceSize cpu_present_size;
+
+static bool pgraph_vk_android_cpu_present_enabled(void)
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *v = getenv("XEMU_ANDROID_CPU_PRESENT");
+        enabled = v && v[0] == '1';
+        if (enabled) {
+            fprintf(stderr, "[info] Android presentation: CPU path (no Vulkan swapchain)\n");
+        }
+    }
+    return enabled;
+}
+
+static bool cpu_present_ensure_buffer(PGRAPHVkState *r, VkDeviceSize size)
+{
+    if (cpu_present_buffer != VK_NULL_HANDLE && cpu_present_size >= size) {
+        return true;
+    }
+    if (cpu_present_buffer != VK_NULL_HANDLE) {
+        vkUnmapMemory(r->device, cpu_present_memory);
+        vkDestroyBuffer(r->device, cpu_present_buffer, NULL);
+        vkFreeMemory(r->device, cpu_present_memory, NULL);
+        cpu_present_buffer = VK_NULL_HANDLE;
+        cpu_present_map = NULL;
+    }
+    VkBufferCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    if (vkCreateBuffer(r->device, &info, NULL, &cpu_present_buffer) != VK_SUCCESS) {
+        cpu_present_buffer = VK_NULL_HANDLE;
+        return false;
+    }
+    VkMemoryRequirements req;
+    vkGetBufferMemoryRequirements(r->device, cpu_present_buffer, &req);
+    VkPhysicalDeviceMemoryProperties props;
+    vkGetPhysicalDeviceMemoryProperties(r->physical_device, &props);
+    uint32_t type = UINT32_MAX;
+    const VkMemoryPropertyFlags want = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    /* prefer cached host memory: we read it back on the CPU */
+    for (int pass = 0; pass < 2 && type == UINT32_MAX; pass++) {
+        for (uint32_t i = 0; i < props.memoryTypeCount; i++) {
+            VkMemoryPropertyFlags f = props.memoryTypes[i].propertyFlags;
+            if ((req.memoryTypeBits & (1u << i)) && (f & want) == want &&
+                (pass == 1 || (f & VK_MEMORY_PROPERTY_HOST_CACHED_BIT))) {
+                type = i;
+                break;
+            }
+        }
+    }
+    VkMemoryAllocateInfo alloc = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = req.size,
+        .memoryTypeIndex = type,
+    };
+    if (type == UINT32_MAX ||
+        vkAllocateMemory(r->device, &alloc, NULL, &cpu_present_memory) != VK_SUCCESS) {
+        vkDestroyBuffer(r->device, cpu_present_buffer, NULL);
+        cpu_present_buffer = VK_NULL_HANDLE;
+        return false;
+    }
+    vkBindBufferMemory(r->device, cpu_present_buffer, cpu_present_memory, 0);
+    if (vkMapMemory(r->device, cpu_present_memory, 0, VK_WHOLE_SIZE, 0,
+                    &cpu_present_map) != VK_SUCCESS) {
+        return false;
+    }
+    cpu_present_size = size;
+    return true;
+}
+
+static void pgraph_vk_android_cpu_present(PGRAPHState *pg)
+{
+    PGRAPHVkState *r = pg->vk_renderer_state;
+    PGRAPHVkDisplayState *disp = &r->display;
+
+    if (disp->image == VK_NULL_HANDLE || disp->width <= 0 || disp->height <= 0) {
+        return;
+    }
+    const uint32_t w = disp->width, h = disp->height;
+    if (!cpu_present_ensure_buffer(r, (VkDeviceSize)w * h * 4)) {
+        xemu_android_log_warn("Android CPU present: no host-visible buffer");
+        return;
+    }
+
+    VkCommandBuffer cmd;
+    if (!pgraph_vk_android_begin_present_commands(pg, &cmd)) {
+        return;
+    }
+    pgraph_vk_transition_image_layout(pg, cmd, disp->image,
+                                      VK_FORMAT_R8G8B8A8_UNORM,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    VkBufferImageCopy region = {
+        .imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .imageSubresource.layerCount = 1,
+        .imageExtent = { w, h, 1 },
+    };
+    vkCmdCopyImageToBuffer(cmd, disp->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           cpu_present_buffer, 1, &region);
+    pgraph_vk_transition_image_layout(pg, cmd, disp->image,
+                                      VK_FORMAT_R8G8B8A8_UNORM,
+                                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    if (!pgraph_vk_android_end_present_commands(pg, cmd)) {
+        return; /* end_present_commands waits for the GPU before returning */
+    }
+
+    ANativeWindow *window = xemu_android_acquire_native_window();
+    if (!window) {
+        return;
+    }
+    /* every frame: the bridge resets geometry to the screen size whenever
+     * the surface changes; the compositor scales this small buffer up. */
+    ANativeWindow_setBuffersGeometry(window, w, h, WINDOW_FORMAT_RGBA_8888);
+    ANativeWindow_Buffer buffer;
+    if (ANativeWindow_lock(window, &buffer, NULL) == 0) {
+        const uint8_t *src = cpu_present_map;
+        uint8_t *dst = buffer.bits;
+        uint32_t rows = MIN(h, (uint32_t)buffer.height);
+        uint32_t cols = MIN(w, (uint32_t)buffer.width);
+        for (uint32_t y = 0; y < rows; y++) {
+            /* the display image is stored bottom-up (see the blit path) */
+            memcpy(dst + (size_t)y * buffer.stride * 4,
+                   src + (size_t)(h - 1 - y) * w * 4, (size_t)cols * 4);
+        }
+        ANativeWindow_unlockAndPost(window);
+        disp->present_count++;
+        xemu_android_mark_frame_presented();
+    } else if ((disp->present_count % 120) == 0) {
+        xemu_android_log_warn("Android CPU present: ANativeWindow_lock failed");
+    }
+    xemu_android_release_native_window(window);
+}
+
 static void pgraph_vk_android_present_placeholder(PGRAPHState *pg)
 {
     PGRAPHVkState *r = pg->vk_renderer_state;
     PGRAPHVkDisplayState *disp = &r->display;
+
+    if (pgraph_vk_android_cpu_present_enabled()) {
+        return; /* nothing to show yet; the window keeps its last buffer */
+    }
 
     if (disp->swapchain_ready &&
         disp->swapchain_window_generation !=
@@ -1549,6 +1705,11 @@ static void pgraph_vk_android_present(PGRAPHState *pg)
     PGRAPHVkDisplayState *disp = &r->display;
 
     if (disp->image == VK_NULL_HANDLE) {
+        return;
+    }
+
+    if (pgraph_vk_android_cpu_present_enabled()) {
+        pgraph_vk_android_cpu_present(pg);
         return;
     }
 

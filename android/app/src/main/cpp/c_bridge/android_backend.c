@@ -331,11 +331,12 @@ static void compute_fast_cores(void) {
 static void boost_thread(pid_t tid, const char *what) {
     int aff = g_fast_mask_valid ?
         sched_setaffinity(tid, sizeof(g_fast_mask), g_fast_mask) : -1;
-    int pri = setpriority(PRIO_PROCESS, (id_t) tid, -10);
+    /* No priority boost: nice -10 starved SystemUI/SurfaceFlinger (UI and
+     * launcher crashed) and delayed compositor buffer releases. */
     char line[160];
     int n = snprintf(line, sizeof(line),
-                     "[perf] boosted %s (tid %d): fast cores %s, priority %s\n", what,
-                     tid, aff == 0 ? "ok" : "unchanged", pri == 0 ? "-10" : "unchanged");
+                     "[perf] %s (tid %d): fast cores %s\n", what,
+                     tid, aff == 0 ? "ok" : "unchanged");
     LOGI("%s", line);
     if (g_log_fd >= 0 && n > 0) {
         write(g_log_fd, line, (size_t) n);
