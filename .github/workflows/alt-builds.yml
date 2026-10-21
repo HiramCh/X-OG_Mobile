@@ -37,10 +37,11 @@ jobs:
       - name: Apply MTK patch
         working-directory: src
         run: |
+          python3 ../patches/gles_strict.py
           if [ "${{ matrix.app }}" = hakux ]; then
             python3 ../patches/hakux_mtk.py
           else
-            sed -i 's/applicationId = "com.izzy2lost.x1box"/applicationId = "com.izzy2lost.x1box.h2mtk"/; s/versionName = "1.2.5"/versionName = "1.2.5-h2mtk"/' android/app/build.gradle.kts
+            sed -i 's/applicationId = "com.izzy2lost.x1box"/applicationId = "com.izzy2lost.x1box.h2mtk"/; s/versionName = "1.2.5"/versionName = "1.2.5-h2mtk2"/; s/versionCode = 26/versionCode = 27/' android/app/build.gradle.kts
             grep -n 'applicationId\|versionName' android/app/build.gradle.kts
           fi
 
