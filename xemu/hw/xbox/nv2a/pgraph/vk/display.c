@@ -1436,7 +1436,7 @@ static bool pgraph_vk_android_end_present_commands(PGRAPHState *pg,
     };
     result = vkQueueSubmit(r->queue, 1, &submit_info, VK_NULL_HANDLE);
     if (result == VK_SUCCESS) {
-        result = vkQueueWaitIdle(r->queue);
+        result = pgraph_vk_queue_wait_idle_patient(r);
     }
 
     r->in_aux_command_buffer = false;

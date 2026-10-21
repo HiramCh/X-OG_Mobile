@@ -79,6 +79,29 @@ typedef void (*sighandler_t)(int);
 sighandler_t signal(int sig, sighandler_t handler);
 int raise(int sig);
 
+/* scheduling (CPU affinity / priority of emulator threads) */
+typedef int pid_t;
+typedef unsigned int id_t;
+#define PRIO_PROCESS 0
+pid_t gettid(void);
+int sched_setaffinity(pid_t pid, size_t setsize, const void *mask);
+int setpriority(int which, id_t who, int prio);
+int nanosleep(const struct timespec *req, struct timespec *rem);
+
+/* /proc/self/task enumeration (bionic arm64 struct dirent) */
+typedef struct DIR DIR;
+struct dirent {
+    uint64_t d_ino;
+    int64_t d_off;
+    unsigned short d_reclen;
+    unsigned char d_type;
+    char d_name[256];
+};
+DIR *opendir(const char *path);
+struct dirent *readdir(DIR *dir);
+int closedir(DIR *dir);
+#define O_RDONLY 0
+
 /* libdl */
 #define RTLD_NEXT ((void *) -1L)
 void *dlsym(void *handle, const char *symbol);

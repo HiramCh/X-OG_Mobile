@@ -1286,8 +1286,17 @@ void pgraph_vk_finish(PGRAPHState *pg, FinishReason finish_reason)
             check_budget = true;
         }
 
-        VK_CHECK(vkWaitForFences(r->device, 1, &r->command_buffer_fence,
-                                 VK_TRUE, UINT64_MAX));
+        {
+            /* Same Mali VK_TIMEOUT tolerance as queue_wait_idle_patient. */
+            VkResult wait_result;
+            int wait_attempts = 0;
+            do {
+                wait_result = vkWaitForFences(r->device, 1,
+                                              &r->command_buffer_fence,
+                                              VK_TRUE, UINT64_MAX);
+            } while (wait_result == VK_TIMEOUT && ++wait_attempts < 60);
+            VK_CHECK(wait_result);
+        }
 
         r->descriptor_set_index = 0;
         r->in_command_buffer = false;

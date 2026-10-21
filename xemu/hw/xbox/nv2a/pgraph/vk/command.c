@@ -86,6 +86,26 @@ VkCommandBuffer pgraph_vk_begin_single_time_commands(PGRAPHState *pg)
     return r->aux_command_buffer;
 }
 
+/*
+ * Mali drivers can return VK_TIMEOUT from vkQueueWaitIdle (not allowed by the
+ * spec) while a job is slow or the firmware is recovering the GPU. Keep
+ * waiting instead of asserting, which killed the whole app mid-game.
+ */
+VkResult pgraph_vk_queue_wait_idle_patient(PGRAPHVkState *r)
+{
+    VkResult result = VK_TIMEOUT;
+    for (int attempt = 0; attempt < 60; attempt++) {
+        result = vkQueueWaitIdle(r->queue);
+        if (result != VK_TIMEOUT && result != VK_NOT_READY) {
+            break;
+        }
+        if (attempt == 0) {
+            fprintf(stderr, "[warn] vkQueueWaitIdle returned %d; retrying\n", result);
+        }
+    }
+    return result;
+}
+
 void pgraph_vk_end_single_time_commands(PGRAPHState *pg, VkCommandBuffer cmd)
 {
     PGRAPHVkState *r = pg->vk_renderer_state;
@@ -101,7 +121,7 @@ void pgraph_vk_end_single_time_commands(PGRAPHState *pg, VkCommandBuffer cmd)
     };
     VK_CHECK(vkQueueSubmit(r->queue, 1, &submit_info, VK_NULL_HANDLE));
     nv2a_profile_inc_counter(NV2A_PROF_QUEUE_SUBMIT_AUX);
-    VK_CHECK(vkQueueWaitIdle(r->queue));
+    VK_CHECK(pgraph_vk_queue_wait_idle_patient(r));
 
     r->in_aux_command_buffer = false;
 }

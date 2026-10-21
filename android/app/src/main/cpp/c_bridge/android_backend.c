@@ -266,6 +266,150 @@ static void install_crash_handlers(void) {
     signal(SIGABRT, crash_signal_handler);
 }
 
+/* ---- Performance: keep emulator threads on the fast CPU cores ----
+ *
+ * Phones mix fast and efficiency cores; Android may leave the x86 translator
+ * (TCG vCPU), the NV2A PFIFO/PGRAPH thread or the QEMU main loop on a slow
+ * core. Pin them to the cores whose max frequency is >= 60% of the fastest
+ * core and raise their priority. Errors are ignored (best effort).
+ */
+static unsigned long g_fast_mask[16];
+static int g_fast_mask_valid;
+
+static long read_long_file(const char *path) {
+    char buf[32];
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        return -1;
+    }
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) {
+        return -1;
+    }
+    buf[n] = 0;
+    long v = 0;
+    for (ssize_t i = 0; i < n && buf[i] >= '0' && buf[i] <= '9'; i++) {
+        v = v * 10 + (buf[i] - '0');
+    }
+    return v;
+}
+
+static void compute_fast_cores(void) {
+    long freq[64];
+    long max = 0;
+    for (int cpu = 0; cpu < 64; cpu++) {
+        char path[96];
+        snprintf(path, sizeof(path),
+                 "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", cpu);
+        freq[cpu] = read_long_file(path);
+        if (freq[cpu] > max) {
+            max = freq[cpu];
+        }
+    }
+    if (max <= 0) {
+        return;
+    }
+    char desc[256];
+    int n = snprintf(desc, sizeof(desc), "Fast CPU cores (max %ld kHz):", max);
+    for (int cpu = 0; cpu < 64; cpu++) {
+        if (freq[cpu] > 0 && freq[cpu] * 10 >= max * 6) {
+            g_fast_mask[cpu / 64] |= 1UL << (cpu % 64);
+            g_fast_mask_valid = 1;
+            if (n < (int) sizeof(desc) - 8) {
+                n += snprintf(desc + n, sizeof(desc) - n, " %d", cpu);
+            }
+        }
+    }
+    LOGI("%s", desc);
+    if (g_log_fd >= 0) {
+        desc[n] = '\n';
+        write(g_log_fd, desc, (size_t) n + 1);
+    }
+}
+
+static void boost_thread(pid_t tid, const char *what) {
+    int aff = g_fast_mask_valid ?
+        sched_setaffinity(tid, sizeof(g_fast_mask), g_fast_mask) : -1;
+    int pri = setpriority(PRIO_PROCESS, (id_t) tid, -10);
+    char line[160];
+    int n = snprintf(line, sizeof(line),
+                     "[perf] boosted %s (tid %d): fast cores %s, priority %s\n", what,
+                     tid, aff == 0 ? "ok" : "unchanged", pri == 0 ? "-10" : "unchanged");
+    LOGI("%s", line);
+    if (g_log_fd >= 0 && n > 0) {
+        write(g_log_fd, line, (size_t) n);
+    }
+}
+
+static int name_has(const char *s, const char *needle) {
+    for (; *s; s++) {
+        const char *a = s, *b = needle;
+        while (*a && *b && *a == *b) {
+            a++;
+            b++;
+        }
+        if (!*b) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* QEMU names its threads with -name debug-threads=on: "ALL CPUs/TCG" (or
+ * "CPU 0/TCG") for the vCPU and "nv2a.pfifo_thre" (truncated) for NV2A. */
+static void *thread_booster(void *unused) {
+    (void) unused;
+    pid_t done[16];
+    int ndone = 0;
+    for (int round = 0; round < 30 && running(); round++) {
+        struct timespec ts = { 1, 0 };
+        nanosleep(&ts, NULL);
+        DIR *dir = opendir("/proc/self/task");
+        if (!dir) {
+            break;
+        }
+        struct dirent *e;
+        while ((e = readdir(dir)) != NULL) {
+            if (e->d_name[0] < '0' || e->d_name[0] > '9') {
+                continue;
+            }
+            pid_t tid = 0;
+            for (const char *p = e->d_name; *p >= '0' && *p <= '9'; p++) {
+                tid = tid * 10 + (*p - '0');
+            }
+            int seen = 0;
+            for (int i = 0; i < ndone; i++) {
+                seen |= done[i] == tid;
+            }
+            if (seen) {
+                continue;
+            }
+            char path[64], comm[32];
+            snprintf(path, sizeof(path), "/proc/self/task/%d/comm", tid);
+            int fd = open(path, O_RDONLY);
+            if (fd < 0) {
+                continue;
+            }
+            ssize_t n = read(fd, comm, sizeof(comm) - 1);
+            close(fd);
+            if (n <= 0) {
+                continue;
+            }
+            comm[n] = 0;
+            if (n > 0 && comm[n - 1] == '\n') {
+                comm[n - 1] = 0;
+            }
+            if ((name_has(comm, "TCG") || name_has(comm, "nv2a")) && ndone < 16) {
+                boost_thread(tid, comm);
+                done[ndone++] = tid;
+            }
+        }
+        closedir(dir);
+    }
+    return NULL;
+}
+
 static void ensure_dir(const char *path) {
     if (path[0]) {
         mkdir(path, 0700);
@@ -275,6 +419,12 @@ static void ensure_dir(const char *path) {
 static void *xemu_thread_main(void *unused) {
     (void) unused;
     LOGI("Starting in-process xemu core");
+    compute_fast_cores();
+    boost_thread(gettid(), "QEMU main loop");
+    pthread_t booster;
+    if (pthread_create(&booster, NULL, thread_booster, NULL) == 0) {
+        pthread_detach(booster);
+    }
     int status = xemu_android_main(g_argc, g_argv_store);
     LOGI("In-process xemu core exited with status %d", status);
     pthread_mutex_lock(&g_lock);
@@ -462,6 +612,9 @@ Java_emu_xbox_og_NativeBridge_nativeLaunch(JNIEnv *env, jclass cls, jstring mcpx
     push_arg("none");
     push_arg("-accel");
     push_arg("tcg");
+    /* name threads so the booster can find the vCPU / NV2A threads */
+    push_arg("-name");
+    push_arg("xemu,debug-threads=on");
     if (g_disc_dup_fd >= 0) {
         push_arg("-add-fd");
         snprintf(buf, sizeof(buf), "fd=%d,set=%d", g_disc_dup_fd, DISC_FDSET_ID);

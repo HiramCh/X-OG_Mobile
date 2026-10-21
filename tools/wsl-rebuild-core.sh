@@ -170,6 +170,10 @@ cp -f "$SRC/subprojects/volk/meson.build" "$SRCCOPY/subprojects/volk/meson.build
 echo "subprojects ready"
 
 echo "== [5/6] Configure + build"
+# ARMv8.2-A (LSE atomics, fp16, dotprod) tuned for modern big cores: every
+# phone this targets (Dimensity 8000+/Snapdragon 8xx) supports it, and LSE
+# atomics matter a lot for QEMU's TCG runtime helpers and locks.
+XOG_CPU_FLAGS="${XOG_CPU_FLAGS:--O2 -march=armv8.2-a+fp16+dotprod+crc -mtune=cortex-a76}"
 # Keep the build directory across runs: ninja re-runs configure
 # automatically when meson.build changes, so core patches rebuild
 # incrementally.
@@ -229,8 +233,8 @@ bash "$SRCCOPY/configure" \
   --disable-oss \
   --disable-sndio \
   --audio-drv-list= \
-  --extra-cflags="-DXBOX=1 -I$PREFIX/include -mbranch-protection=none -fno-sanitize=safe-stack" \
-  --extra-cxxflags="-mbranch-protection=none -fno-sanitize=safe-stack" \
+  --extra-cflags="-DXBOX=1 -I$PREFIX/include -mbranch-protection=none -fno-sanitize=safe-stack $XOG_CPU_FLAGS" \
+  --extra-cxxflags="-mbranch-protection=none -fno-sanitize=safe-stack $XOG_CPU_FLAGS" \
   --extra-ldflags="-L$PREFIX/lib -mbranch-protection=none"
 fi
 
