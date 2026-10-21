@@ -575,7 +575,7 @@
             android:layout_weight="1"
             android:background="@android:color/black">
 
-            <TextureView
+            <SurfaceView
                 android:id="@+id/renderSurface"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />

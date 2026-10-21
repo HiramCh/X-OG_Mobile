@@ -1257,8 +1257,14 @@ static bool pgraph_vk_android_create_swapchain(PGRAPHState *pg)
             present_modes);
     }
 
+    /* FIFO is the mode Android's compositor is built around; MAILBOX keeps
+     * replacing queued buffers, which on Mali left the release fences of the
+     * replaced buffers pending (SW_FAULT_2 fence timeouts). Opt back in with
+     * XEMU_ANDROID_PRESENT_MAILBOX=1. */
     VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-    for (uint32_t i = 0; i < present_mode_count; i++) {
+    const char *mailbox_env = getenv("XEMU_ANDROID_PRESENT_MAILBOX");
+    for (uint32_t i = 0; mailbox_env && mailbox_env[0] == '1' &&
+                         i < present_mode_count; i++) {
         if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
             present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
             break;

@@ -24,7 +24,8 @@ import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
-import android.view.TextureView;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -62,7 +63,7 @@ import java.security.MessageDigest;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-public class MainActivity extends Activity implements TextureView.SurfaceTextureListener, TouchControllerView.Listener {
+public class MainActivity extends Activity implements SurfaceHolder.Callback, TouchControllerView.Listener {
     private static final String TAG = "X-OG Mobile";
     private static final int REQ_MCPX = 100;
     private static final int REQ_BIOS = 101;
@@ -132,7 +133,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     private TextView antiDzLabel;
     private AimController aim;
     private EditText rawgApiKeyInput;
-    private TextureView renderSurface;
+    private SurfaceView renderSurface;
     private Surface currentSurface;
     private int surfaceWidth;
     private int surfaceHeight;
@@ -330,7 +331,11 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         enterImmersiveMode();
 
         renderSurface = findViewById(R.id.renderSurface);
-        renderSurface.setSurfaceTextureListener(this);
+        // SurfaceView hands frames straight to SurfaceFlinger. The previous
+        // TextureView routed every frame through this app's UI thread, and
+        // when it lagged behind the core the GPU waited on the buffer release
+        // fence for > 3 s: Mali SW_FAULT_2 (0x72) + GPU reset every few seconds.
+        renderSurface.getHolder().addCallback(this);
         statusIcon = findViewById(R.id.statusIcon);
         statusText = findViewById(R.id.statusText);
         fixNowButton = findViewById(R.id.fixNowButton);
@@ -2271,40 +2276,33 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     }
 
     @Override
-    public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
-        releaseCurrentSurface();
-        currentSurface = new Surface(surfaceTexture);
-        surfaceWidth = width;
-        surfaceHeight = height;
-        NativeBridge.nativeSurfaceCreated(currentSurface, width, height);
+    public void surfaceCreated(SurfaceHolder holder) {
+        currentSurface = holder.getSurface();
+        android.graphics.Rect frame = holder.getSurfaceFrame();
+        surfaceWidth = frame.width();
+        surfaceHeight = frame.height();
+        if (surfaceWidth > 0 && surfaceHeight > 0) {
+            NativeBridge.nativeSurfaceCreated(currentSurface, surfaceWidth, surfaceHeight);
+        }
     }
 
     @Override
-    public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int width, int height) {
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        currentSurface = holder.getSurface();
         surfaceWidth = width;
         surfaceHeight = height;
-        if (currentSurface == null) {
-            currentSurface = new Surface(surfaceTexture);
-        }
         NativeBridge.nativeSurfaceChanged(currentSurface, width, height);
     }
 
     @Override
-    public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+    public void surfaceDestroyed(SurfaceHolder holder) {
         NativeBridge.nativeSurfaceDestroyed();
         releaseCurrentSurface();
-        return true;
     }
 
-    @Override
-    public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
-    }
-
+    /** The SurfaceView owns its Surface; only drop our reference. */
     private void releaseCurrentSurface() {
-        if (currentSurface != null) {
-            currentSurface.release();
-            currentSurface = null;
-        }
+        currentSurface = null;
     }
 
     @Override
