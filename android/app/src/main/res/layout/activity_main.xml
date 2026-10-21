@@ -201,6 +201,13 @@
                         android:textColor="@color/text" />
 
                     <CheckBox
+                        android:id="@+id/pixelDepthCheck"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/display_pixel_depth"
+                        android:textColor="@color/text" />
+
+                    <CheckBox
                         android:id="@+id/cpuPresentCheck"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

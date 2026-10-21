@@ -36,6 +36,19 @@ DEF_UNIFORM_INFO_ARR(PshUniform, PSH_UNIFORM_DECL_X)
 // TODO: https://github.com/xemu-project/xemu/issues/2260
 //   Investigate how color keying is handled for components with no alpha or
 //   only alpha.
+
+/* XEMU_ANDROID_PIXEL_DEPTH (default on): per-pixel depth for draws without a
+ * geometry shader (Mali path). "0" restores per-triangle depth. */
+static bool pgraph_glsl_android_pixel_depth(void)
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *v = getenv("XEMU_ANDROID_PIXEL_DEPTH");
+        enabled = !(v && v[0] == '0');
+    }
+    return enabled;
+}
+
 static uint32_t get_colorkey_mask(unsigned int color_format)
 {
     switch (color_format) {
@@ -1028,13 +1041,19 @@ static MString* psh_convert(struct PixelShader *ps)
             // No geometry shader (Mali path): the three positions are the
             // same vertex, so interpolate 1/w per pixel instead and derive
             // the polygon-offset slope from its screen-space derivatives.
-            "float triMZ_eff = triMZ;\n"
-            "float invw_slope = max(abs(dFdx(vtxInvW)) * float(surfaceScale.x),\n"
-            "                       abs(dFdy(vtxInvW)) * float(surfaceScale.y));\n"
-            "if (all(equal(vtxPos0, vtxPos1)) && all(equal(vtxPos1, vtxPos2))) {\n"
-            "  zvalue = 1.0 / vtxInvW;\n"
-            "  triMZ_eff = invw_slope;\n"
-            "}\n"
+            "float triMZ_eff = triMZ;\n");
+        if (pgraph_glsl_android_pixel_depth()) {
+            mstring_append(
+                clip,
+                "float invw_slope = max(abs(dFdx(vtxInvW)) * float(surfaceScale.x),\n"
+                "                       abs(dFdy(vtxInvW)) * float(surfaceScale.y));\n"
+                "if (all(equal(vtxPos0, vtxPos1)) && all(equal(vtxPos1, vtxPos2))) {\n"
+                "  zvalue = 1.0 / vtxInvW;\n"
+                "  triMZ_eff = invw_slope;\n"
+                "}\n");
+        }
+        mstring_append(
+            clip,
             "if (zvalue > 0.0) {\n"
             "  float zslopeofs = depthFactor*triMZ_eff*zvalue*zvalue;\n"
             "  zvalue += depthOffset;\n"
@@ -1061,13 +1080,19 @@ static MString* psh_convert(struct PixelShader *ps)
             "bc1 *= inv_bcsum;\n"
             "bc2 *= inv_bcsum;\n"
             "precise float zvalue = vtxPos0.z + (bc1*(vtxPos1.z - vtxPos0.z) + bc2*(vtxPos2.z - vtxPos0.z));\n"
-            "float triMZ_eff = triMZ;\n"
-            "float z_slope = max(abs(dFdx(vtxZ)) * float(surfaceScale.x),\n"
-            "                    abs(dFdy(vtxZ)) * float(surfaceScale.y));\n"
-            "if (all(equal(vtxPos0, vtxPos1)) && all(equal(vtxPos1, vtxPos2))) {\n"
-            "  zvalue = vtxZ;\n"
-            "  triMZ_eff = z_slope;\n"
-            "}\n"
+            "float triMZ_eff = triMZ;\n");
+        if (pgraph_glsl_android_pixel_depth()) {
+            mstring_append(
+                clip,
+                "float z_slope = max(abs(dFdx(vtxZ)) * float(surfaceScale.x),\n"
+                "                    abs(dFdy(vtxZ)) * float(surfaceScale.y));\n"
+                "if (all(equal(vtxPos0, vtxPos1)) && all(equal(vtxPos1, vtxPos2))) {\n"
+                "  zvalue = vtxZ;\n"
+                "  triMZ_eff = z_slope;\n"
+                "}\n");
+        }
+        mstring_append(
+            clip,
             "zvalue += depthOffset;\n"
             "zvalue += depthFactor*triMZ_eff;\n");
     }

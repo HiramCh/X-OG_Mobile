@@ -37,6 +37,7 @@
     <string name="display_stretch">Pantalla completa (ocupar toda la pantalla del teléfono)</string>
     <string name="display_widescreen">Modo panorámico 16:9 de la Xbox (los juegos dibujan en ancho, menos deformación)</string>
     <string name="widescreen_next_launch">El modo panorámico se aplicará desde el siguiente arranque (la EEPROM de la Xbox se crea en el primero).</string>
-    <string name="display_aniso">Texturas nítidas (filtro anisotrópico 16x, más detalle sin subir la resolución)</string>
-    <string name="display_cpu_present">Mostrar cuadros desde la CPU (sin swapchain Vulkan; evita reinicios de la GPU Mali)</string>
+    <string name="display_aniso">Experimental: texturas nítidas (filtro anisotrópico 16x, más carga para la GPU)</string>
+    <string name="display_cpu_present">Experimental: mostrar cuadros desde la CPU (sin swapchain Vulkan, más lento)</string>
+    <string name="display_pixel_depth">Profundidad por píxel (corrige objetos que parpadean sin geometry shader)</string>
 </resources>

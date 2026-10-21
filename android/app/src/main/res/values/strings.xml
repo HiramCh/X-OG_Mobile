@@ -87,6 +87,7 @@
     <string name="display_stretch">Full screen (fill the whole phone display)</string>
     <string name="display_widescreen">Xbox widescreen 16:9 mode (games render wide, less stretching)</string>
     <string name="widescreen_next_launch">Widescreen will be applied from the next launch (the Xbox EEPROM is created on the first one).</string>
-    <string name="display_aniso">Sharp textures (16x anisotropic filtering, more detail at the same resolution)</string>
-    <string name="display_cpu_present">Present frames from the CPU (no Vulkan swapchain; avoids Mali GPU resets)</string>
+    <string name="display_aniso">Experimental: sharp textures (16x anisotropic filtering, heavier on the GPU)</string>
+    <string name="display_cpu_present">Experimental: present frames from the CPU (no Vulkan swapchain, slower)</string>
+    <string name="display_pixel_depth">Per-pixel depth (fixes flickering objects without the geometry shader)</string>
 </resources>

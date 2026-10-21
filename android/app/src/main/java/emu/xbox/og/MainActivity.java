@@ -94,8 +94,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, To
     private static final String PREF_VK_AGGRESSIVE = "vk_aggressive";
     private static final String PREF_STRETCH = "display_stretch";
     private static final String PREF_WIDESCREEN = "guest_widescreen";
-    private static final String PREF_ANISO = "texture_aniso16";
-    private static final String PREF_CPU_PRESENT = "cpu_present";
+    private static final String PREF_ANISO = "texture_aniso16_v2";
+    private static final String PREF_CPU_PRESENT = "cpu_present_v2";
+    private static final String PREF_PIXEL_DEPTH = "pixel_depth";
     private static final String FALLBACK_RAWG_API_KEY = "49a269369d354baa8d31978bb9e4b4a4";
     private static final int XDVD_SECTOR_SIZE = 2048;
     private static final byte[] XDVD_MAGIC = "MICROSOFT*XBOX*MEDIA".getBytes(StandardCharsets.US_ASCII);
@@ -2057,10 +2058,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, To
         boolean stretch = settingBoolean(PREF_STRETCH, true);
         try {
             android.system.Os.setenv("XEMU_ANDROID_STRETCH", stretch ? "1" : "0", true);
+            android.system.Os.setenv("XEMU_ANDROID_PIXEL_DEPTH",
+                    settingBoolean(PREF_PIXEL_DEPTH, true) ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_CPU_PRESENT",
-                    settingBoolean(PREF_CPU_PRESENT, true) ? "1" : "0", true);
+                    settingBoolean(PREF_CPU_PRESENT, false) ? "1" : "0", true);
             android.system.Os.setenv("XEMU_ANDROID_ANISO",
-                    settingBoolean(PREF_ANISO, true) ? "16" : "0", true);
+                    settingBoolean(PREF_ANISO, false) ? "16" : "0", true);
         } catch (Exception e) {
             appendLog("Unable to set display options: " + e.getMessage());
         }
@@ -2070,11 +2073,14 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, To
     private void bindDiagnosticChecks() {
         CheckBox stretch = findViewById(R.id.stretchCheck);
         CheckBox widescreen = findViewById(R.id.widescreenCheck);
+        CheckBox pixelDepth = findViewById(R.id.pixelDepthCheck);
+        pixelDepth.setChecked(settingBoolean(PREF_PIXEL_DEPTH, true));
+        pixelDepth.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_PIXEL_DEPTH, checked));
         CheckBox cpuPresent = findViewById(R.id.cpuPresentCheck);
-        cpuPresent.setChecked(settingBoolean(PREF_CPU_PRESENT, true));
+        cpuPresent.setChecked(settingBoolean(PREF_CPU_PRESENT, false));
         cpuPresent.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_CPU_PRESENT, checked));
         CheckBox aniso = findViewById(R.id.anisoCheck);
-        aniso.setChecked(settingBoolean(PREF_ANISO, true));
+        aniso.setChecked(settingBoolean(PREF_ANISO, false));
         aniso.setOnCheckedChangeListener((b, checked) -> saveBoolean(PREF_ANISO, checked));
         stretch.setChecked(settingBoolean(PREF_STRETCH, true));
         widescreen.setChecked(settingBoolean(PREF_WIDESCREEN, true));
