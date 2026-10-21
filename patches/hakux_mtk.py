@@ -160,7 +160,7 @@ for d in ("values", "values-night"):
 
 # Original launcher icon (green orb + energy ring)
 import subprocess, os
-subprocess.check_call([sys.executable, "-I", os.path.join(os.path.dirname(os.path.abspath(__file__)), "make_icon.py"),
+subprocess.check_call([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "make_icon.py"),
                        "android/app/src/main/res"])
 print("ok icon")
 print("hakuX MTK patch applied")
