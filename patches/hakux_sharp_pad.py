@@ -198,3 +198,76 @@ s = s.replace('''            fprintf(stderr, "input: physical controller '%s' bo
                                 jname ? jname : new_con->name);''')
 open(I, "w", encoding="utf-8").write(s)
 print("usb pad + logging applied")
+
+# --- multi-interface pads (EasySMX & co. show up as several devices and
+# switch identity): port 1 reads ALL physical pads merged, and when one
+# interface goes away port 1 goes to another physical pad before falling
+# back to the on-screen controller.
+sub(I, "ControllerState *bound_controllers[4] = { NULL, NULL, NULL, NULL };", '''ControllerState *bound_controllers[4] = { NULL, NULL, NULL, NULL };
+#ifdef __ANDROID__
+static bool xog_is_virtual_pad(ControllerState *c)
+{
+    const char *n = (c && c->sdl_joystick) ? SDL_JoystickName(c->sdl_joystick) : NULL;
+    return n && strcmp(n, "On-Screen Controller") == 0;
+}
+#endif''')
+sub(I, '''    } else if (state->type == INPUT_DEVICE_SDL_GAMECONTROLLER) {
+        xemu_input_update_sdl_controller_state(state);
+    }
+
+    state->last_input_updated_ts = qemu_clock_get_us(QEMU_CLOCK_REALTIME);''', '''    } else if (state->type == INPUT_DEVICE_SDL_GAMECONTROLLER) {
+        xemu_input_update_sdl_controller_state(state);
+#ifdef __ANDROID__
+        if (state->bound == 0 && !xog_is_virtual_pad(state)) {
+            ControllerState *o;
+            QTAILQ_FOREACH(o, &available_controllers, entry) {
+                if (o == state || o->type != INPUT_DEVICE_SDL_GAMECONTROLLER ||
+                    o->bound > 0 || xog_is_virtual_pad(o)) {
+                    continue;
+                }
+                xemu_input_update_sdl_controller_state(o);
+                state->buttons |= o->buttons;
+                for (int a = 0; a < 6; a++) {
+                    if (abs(o->axis[a]) > abs(state->axis[a])) {
+                        state->axis[a] = o->axis[a];
+                    }
+                }
+            }
+        }
+#endif
+    }
+
+    state->last_input_updated_ts = qemu_clock_get_us(QEMU_CLOCK_REALTIME);''')
+sub(I, '''        /* Physical pad gone: give port 1 back to the on-screen controller. */
+        if (!xemu_input_get_bound(0)) {
+            ControllerState *c;
+            QTAILQ_FOREACH(c, &available_controllers, entry) {''', '''        /* Interface gone: port 1 goes to another physical pad if any,
+         * otherwise back to the on-screen controller. */
+        if (!xemu_input_get_bound(0)) {
+            ControllerState *c;
+            QTAILQ_FOREACH(c, &available_controllers, entry) {
+                if (c->type == INPUT_DEVICE_SDL_GAMECONTROLLER &&
+                    !xog_is_virtual_pad(c) && c->bound < 0) {
+                    xemu_input_bind(0, c, 0);
+                    xemu_input_rebind_xmu(0);
+                    __android_log_print(ANDROID_LOG_INFO, "hakuX",
+                                        "input: port 1 -> remaining pad '%s'", c->name);
+                    break;
+                }
+            }
+        }
+        if (!xemu_input_get_bound(0)) {
+            ControllerState *c;
+            QTAILQ_FOREACH(c, &available_controllers, entry) {''')
+print("multi-interface pad merge applied")
+
+# one-time: back to native 1x scale (2x dropped Halo 2 to ~20 fps on Mali-G720)
+sub(J + "MainActivity.kt", '''          .putBoolean("h2mtk_fullscreen_v1", true).apply()
+      }''', '''          .putBoolean("h2mtk_fullscreen_v1", true).apply()
+      }
+      if (!p.getBoolean("h2mtk_scale1_v1", false)) {
+        p.edit().putInt("surface_scale", 1)
+          .remove(PerGameSettingsManager.runtimeKey("surface_scale"))
+          .putBoolean("h2mtk_scale1_v1", true).apply()
+      }''')
+print("scale reset applied")
