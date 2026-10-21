@@ -1025,8 +1025,18 @@ static MString* psh_convert(struct PixelShader *ps)
             // making the interpolated w-coordinate above zero or negative. We
             // should prevent such wrapping through infinity by clamping to
             // infinity.
+            // No geometry shader (Mali path): the three positions are the
+            // same vertex, so interpolate 1/w per pixel instead and derive
+            // the polygon-offset slope from its screen-space derivatives.
+            "float triMZ_eff = triMZ;\n"
+            "float invw_slope = max(abs(dFdx(vtxInvW)) * float(surfaceScale.x),\n"
+            "                       abs(dFdy(vtxInvW)) * float(surfaceScale.y));\n"
+            "if (all(equal(vtxPos0, vtxPos1)) && all(equal(vtxPos1, vtxPos2))) {\n"
+            "  zvalue = 1.0 / vtxInvW;\n"
+            "  triMZ_eff = invw_slope;\n"
+            "}\n"
             "if (zvalue > 0.0) {\n"
-            "  float zslopeofs = depthFactor*triMZ*zvalue*zvalue;\n"
+            "  float zslopeofs = depthFactor*triMZ_eff*zvalue*zvalue;\n"
             "  zvalue += depthOffset;\n"
             "  zvalue += zslopeofs;\n"
             "} else {\n"
@@ -1051,8 +1061,15 @@ static MString* psh_convert(struct PixelShader *ps)
             "bc1 *= inv_bcsum;\n"
             "bc2 *= inv_bcsum;\n"
             "precise float zvalue = vtxPos0.z + (bc1*(vtxPos1.z - vtxPos0.z) + bc2*(vtxPos2.z - vtxPos0.z));\n"
+            "float triMZ_eff = triMZ;\n"
+            "float z_slope = max(abs(dFdx(vtxZ)) * float(surfaceScale.x),\n"
+            "                    abs(dFdy(vtxZ)) * float(surfaceScale.y));\n"
+            "if (all(equal(vtxPos0, vtxPos1)) && all(equal(vtxPos1, vtxPos2))) {\n"
+            "  zvalue = vtxZ;\n"
+            "  triMZ_eff = z_slope;\n"
+            "}\n"
             "zvalue += depthOffset;\n"
-            "zvalue += depthFactor*triMZ;\n");
+            "zvalue += depthFactor*triMZ_eff;\n");
     }
 
     /* Depth clipping */

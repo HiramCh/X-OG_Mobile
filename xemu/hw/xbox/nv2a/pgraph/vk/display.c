@@ -1532,7 +1532,7 @@ static void pgraph_vk_android_present_placeholder(PGRAPHState *pg)
         pgraph_vk_android_create_swapchain(pg);
         return;
     }
-    if (result != VK_SUCCESS) {
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         xemu_android_log_warn("Android Vulkan placeholder: present failed: %d", result);
         return;
     }
@@ -1703,7 +1703,7 @@ static void pgraph_vk_android_present(PGRAPHState *pg)
         pgraph_vk_android_create_swapchain(pg);
         return;
     }
-    if (result != VK_SUCCESS) {
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         xemu_android_log_warn("Android Vulkan present: present failed: %d", result);
         return;
     }

@@ -1345,6 +1345,17 @@ static void create_texture(PGRAPHState *pg, int texture_idx)
     }
     uint32_t sampler_max_anisotropy =
         MIN(r->device_props.limits.maxSamplerAnisotropy, max_anisotropy);
+    /* XEMU_ANDROID_ANISO=N forces N-x anisotropic filtering on filtered
+     * textures: sharper floors/walls at grazing angles, same resolution. */
+    {
+        const char *aniso_env = getenv("XEMU_ANDROID_ANISO");
+        int forced = aniso_env ? atoi(aniso_env) : 0;
+        if (forced > 1 && vk_min_filter == VK_FILTER_LINEAR) {
+            sampler_max_anisotropy =
+                MIN((uint32_t)forced,
+                    (uint32_t)r->device_props.limits.maxSamplerAnisotropy);
+        }
+    }
 
     VkSamplerCreateInfo sampler_create_info = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,

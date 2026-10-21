@@ -52,6 +52,10 @@ MString *pgraph_glsl_get_vtx_header(MString *out, bool location, bool smooth,
         { flat_s,      vec4_s,  "vtxPos1" },
         { flat_s,      vec4_s,  "vtxPos2" },
         { flat_s,      float_s, "triMZ"  },
+        /* Per-pixel depth inputs for draws without a geometry shader
+         * (Mali path): screen-space linear z and 1/w. */
+        { "noperspective ", float_s, "vtxZ" },
+        { "noperspective ", float_s, "vtxInvW" },
     };
 
     for (int i = 0; i < ARRAY_SIZE(attr); i++) {

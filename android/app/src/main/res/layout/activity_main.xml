@@ -200,6 +200,13 @@
                         android:text="@string/display_widescreen"
                         android:textColor="@color/text" />
 
+                    <CheckBox
+                        android:id="@+id/anisoCheck"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/display_aniso"
+                        android:textColor="@color/text" />
+
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

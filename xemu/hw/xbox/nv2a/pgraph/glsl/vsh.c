@@ -250,6 +250,8 @@ MString *pgraph_glsl_gen_vsh(const VshState *state, GenVshGlslOptions opts)
                        "#define vtxPos1 v_vtxPos1\n"
                        "#define vtxPos2 v_vtxPos2\n"
                        "#define triMZ v_triMZ\n"
+                       "#define vtxZ v_vtxZ\n"
+                       "#define vtxInvW v_vtxInvW\n"
                        );
     }
     mstring_append(header, "\n");
@@ -409,6 +411,8 @@ MString *pgraph_glsl_gen_vsh(const VshState *state, GenVshGlslOptions opts)
                    "  vtxPos1 = vtxPos;\n"
                    "  vtxPos2 = vtxPos;\n"
                    "  triMZ = 0.0;\n"
+                   "  vtxZ = vtxPos.z;\n"
+                   "  vtxInvW = 1.0 / vtxPos.w;\n"
                    "  gl_PointSize = oPts.x;\n"
     );
 
