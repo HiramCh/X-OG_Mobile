@@ -29,8 +29,8 @@ def sub(path, old, new, count=1):
 # identity
 sub("android/app/build.gradle.kts", 'applicationId = "com.rfandango.haku_x"',
     'applicationId = "com.rfandango.haku_x.h2mtk"')
-sub("android/app/build.gradle.kts", 'versionCode = 5', 'versionCode = 7')
-sub("android/app/build.gradle.kts", 'versionName = "0.3.1"', 'versionName = "0.3.1-h2mtk3"')
+sub("android/app/build.gradle.kts", 'versionCode = 5', 'versionCode = 8')
+sub("android/app/build.gradle.kts", 'versionName = "0.3.1"', 'versionName = "0.3.1-h2mtk4"')
 sub("android/app/build.gradle.kts", 'resValue("string", "app_name", "hakuX")',
     'resValue("string", "app_name", "hakuX H2 MTK")')
 
@@ -93,4 +93,74 @@ sub(X, """#ifdef __ANDROID__
 sub(J + "HakuXApplication.kt", '"EGL:W", "Vulkan:V",',
     '"EGL:W", "Vulkan:V", "libEGL:V", "GLES:V", "mali:V", "Mali:V", "OpenGLRenderer:W", "SDL:V", "xemu-android:V",')
 sub(J + "HakuXApplication.kt", '"*:S"', '"*:W"')
+
+# Fill the whole screen, including the camera cut-out, and move existing
+# installs to the stretched (full width + height) picture once.
+sub(J + "MainActivity.kt", """  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    val prefs = getSharedPreferences("x1box_prefs", MODE_PRIVATE)""", """  override fun onCreate(savedInstanceState: Bundle?) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      window.attributes = window.attributes.apply {
+        layoutInDisplayCutoutMode =
+          android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+      }
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      window.attributes = window.attributes.apply {
+        layoutInDisplayCutoutMode =
+          android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+      }
+    }
+    getSharedPreferences("x1box_prefs", MODE_PRIVATE).let { p ->
+      if (!p.getBoolean("h2mtk_fullscreen_v1", false)) {
+        p.edit().putString("aspect_ratio", "fit")
+          .remove(PerGameSettingsManager.runtimeKey("aspect_ratio"))
+          .putBoolean("h2mtk_fullscreen_v1", true).apply()
+      }
+    }
+    super.onCreate(savedInstanceState)
+    val prefs = getSharedPreferences("x1box_prefs", MODE_PRIVATE)""")
+
+# Original-Xbox style theme: black with glowing green, always dark.
+XBOX_COLORS = """<resources>
+  <color name="xemu_black">#050A04</color>
+  <color name="xemu_surface">#0D1A0A</color>
+  <color name="xemu_surface_variant">#15290F</color>
+  <color name="xemu_text">#E4FFD6</color>
+  <color name="xemu_text_muted">#8DBA78</color>
+  <color name="xemu_green">#7AC943</color>
+  <color name="xemu_green_dark">#3E8E1C</color>
+  <color name="xemu_outline">#2F5A1F</color>
+  <color name="xemu_outline_variant">#1F3D15</color>
+</resources>
+"""
+for d in ("values", "values-night"):
+    import glob, re
+    for f in glob.glob("android/app/src/main/res/%s/*.xml" % d):
+        t = open(f, encoding="utf-8").read()
+        if '<color name="xemu_black">' in t:
+            open(f, "w", encoding="utf-8").write(XBOX_COLORS)
+            print("ok xbox colors", f)
+        if 'name="Theme.Xemu"' in t:
+            t = re.sub(r'<item name="android:statusBarColor">[^<]*</item>',
+                       '<item name="android:statusBarColor">#000000</item>', t)
+            t = re.sub(r'<item name="android:navigationBarColor">[^<]*</item>',
+                       '<item name="android:navigationBarColor">#000000</item>', t)
+            t = t.replace('<item name="android:windowLightStatusBar">true</item>',
+                          '<item name="android:windowLightStatusBar">false</item>')
+            t = t.replace('<item name="colorOnPrimary">#FFFFFF</item>',
+                          '<item name="colorOnPrimary">#061004</item>')
+            t = t.replace('<item name="colorOnPrimaryContainer">#FFFFFF</item>',
+                          '<item name="colorOnPrimaryContainer">#061004</item>')
+            t = t.replace('<item name="colorOnSecondary">#FFFFFF</item>',
+                          '<item name="colorOnSecondary">#061004</item>')
+            t = t.replace('parent="Theme.Material3.DayNight.NoActionBar"',
+                          'parent="Theme.Material3.Dark.NoActionBar"')
+            open(f, "w", encoding="utf-8").write(t)
+            print("ok xbox theme", f)
+
+# Original launcher icon (green orb + energy ring)
+import subprocess, os
+subprocess.check_call([sys.executable, "-I", os.path.join(os.path.dirname(os.path.abspath(__file__)), "make_icon.py"),
+                       "android/app/src/main/res"])
+print("ok icon")
 print("hakuX MTK patch applied")

@@ -37,6 +37,7 @@ jobs:
       - name: Apply MTK patch
         working-directory: src
         run: |
+          python3 -c "import PIL" 2>/dev/null || python3 -m pip install --quiet --break-system-packages pillow || sudo apt-get install -y -qq python3-pil
           python3 ../patches/gles_strict.py
           python3 ../patches/gles_stream_vbo.py
           if [ "${{ matrix.app }}" = hakux ]; then
