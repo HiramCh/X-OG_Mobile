@@ -193,7 +193,9 @@ def rewrite_method_refs(s, outer):
 
 def main(path):
     s = open(path, encoding="utf-8").read()
-    outer = re.search(r"public (?:final )?class (\w+)", s).group(1)
+    if not code_positions(s, "->") and not code_positions(s, "::"):
+        return
+    outer = re.search(r"^(?:public )?(?:final )?class (\w+)", s, re.M).group(1)
     s = rewrite_method_refs(s, outer)
     while True:
         arrows = code_positions(s, "->")

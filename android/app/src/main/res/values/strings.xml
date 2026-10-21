@@ -58,4 +58,14 @@
     <string name="aim_invert_y">Invert vertical aim</string>
     <string name="aim_sensitivity">Aim sensitivity: %1$d%%</string>
     <string name="aim_anti_deadzone">Dead zone compensation: %1$d%%</string>
+    <string name="auto_import_system">Auto-import system files from a folder</string>
+    <string name="auto_import_explain">Put your MCPX (512 bytes), BIOS (256 KB or 1 MB) and HDD image (.qcow2/.img) in one folder, e.g. Download/Xbox, then pick that folder.</string>
+    <string name="auto_import_hint">Pick the folder that holds your MCPX, BIOS and HDD files (Android does not allow picking Download itself; use a sub-folder such as Download/Xbox).</string>
+    <string name="auto_import_busy">An import is already running.</string>
+    <string name="auto_import_scanning">Scanning folder for MCPX, BIOS and HDD...</string>
+    <string name="auto_import_copying">Importing %1$s</string>
+    <string name="auto_import_result">Auto-import result:</string>
+    <string name="auto_import_not_found">not found</string>
+    <string name="auto_import_ready">System files ready. You can start a game.</string>
+    <string name="auto_import_partial">Some files are missing; add them to the folder or pick them manually below.</string>
 </resources>

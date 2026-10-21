@@ -68,6 +68,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
     private static final int REQ_BIOS = 101;
     private static final int REQ_HDD = 102;
     private static final int REQ_LIBRARY_TREE = 105;
+    private static final int REQ_SYSTEM_TREE = 106;
     private static final String PREFS = "xboxemu_files";
     private static final String PREF_DISC_URI = "disc_uri";
     private static final String PREF_DISC_NAME = "disc_name";
@@ -293,6 +294,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         bindPicker(R.id.pickMcpx, REQ_MCPX);
         bindPicker(R.id.pickBios, REQ_BIOS);
         bindPicker(R.id.pickHdd, REQ_HDD);
+        findViewById(R.id.autoImportSystemButton).setOnClickListener(v -> openSystemFolderPicker());
         findViewById(R.id.pickDisc).setOnClickListener(v -> showLibraryPanel());
 
         Button launch = findViewById(R.id.launchButton);
@@ -580,6 +582,10 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
             selectLibraryFolder(data, uri);
             return;
         }
+        if (requestCode == REQ_SYSTEM_TREE) {
+            autoImportSystemFiles(uri);
+            return;
+        }
         if (importInProgress) {
             appendLog("Import already in progress. Wait for it to finish before picking another file.");
             return;
@@ -641,6 +647,178 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
             throw new IllegalStateException("Unable to finalize imported " + suffix);
         }
         return out;
+    }
+
+    // ---- Automatic system file import ----
+
+    /** Xbox MCPX boot ROM is always exactly 512 bytes. */
+    private static final long MCPX_SIZE = 512L;
+    /** Xbox flash/BIOS images: 256 KB (most retail dumps) or 1 MB (full flash). */
+    private static final long[] BIOS_SIZES = {262144L, 524288L, 1048576L};
+    /** Smallest size accepted as an HDD image (a qcow2 header + dashboard partitions). */
+    private static final long HDD_MIN_SIZE = 8L * 1024 * 1024;
+
+    private static final class FoundFile {
+        final Uri uri;
+        final String name;
+        final long size;
+        final int score;
+
+        FoundFile(Uri uri, String name, long size, int score) {
+            this.uri = uri;
+            this.name = name;
+            this.size = size;
+            this.score = score;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void openSystemFolderPicker() {
+        if (importInProgress) {
+            appendLog(getString(R.string.auto_import_busy));
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            // Start the picker in Download/ so the usual location is one tap away.
+            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, DocumentsContract.buildDocumentUri(
+                    "com.android.externalstorage.documents", "primary:Download"));
+        } catch (Exception ignored) {
+        }
+        appendLog(getString(R.string.auto_import_hint));
+        try {
+            startActivityForResult(intent, REQ_SYSTEM_TREE);
+        } catch (ActivityNotFoundException e) {
+            appendLog("Picker unavailable: " + e.getMessage());
+        }
+    }
+
+    private static boolean isBiosSize(long size) {
+        for (long s : BIOS_SIZES) {
+            if (s == size) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Walks the picked folder (and its sub-folders, 3 levels deep) for candidate files. */
+    private void collectSystemCandidates(Uri treeUri, String documentId, int depth,
+                                         List<FoundFile> mcpx, List<FoundFile> bios, List<FoundFile> hdd) {
+        Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId);
+        String[] projection = {
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE
+        };
+        try (Cursor cursor = getContentResolver().query(childrenUri, projection, null, null, null)) {
+            if (cursor == null) {
+                return;
+            }
+            while (cursor.moveToNext()) {
+                String name = cursor.getString(0);
+                String childId = cursor.getString(1);
+                String mime = cursor.getString(2);
+                long size = cursor.isNull(3) ? -1 : cursor.getLong(3);
+                if (name == null || childId == null) {
+                    continue;
+                }
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+                    if (depth < 3) {
+                        collectSystemCandidates(treeUri, childId, depth + 1, mcpx, bios, hdd);
+                    }
+                    continue;
+                }
+                String lower = name.toLowerCase(Locale.ROOT);
+                Uri uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId);
+                if (size == MCPX_SIZE) {
+                    int score = lower.contains("mcpx") ? 10 : 0;
+                    if (lower.contains("1.0")) {
+                        score += 2;
+                    }
+                    mcpx.add(new FoundFile(uri, name, size, score));
+                } else if (isBiosSize(size)) {
+                    int score = 0;
+                    if (lower.contains("bios")) score += 5;
+                    if (lower.contains("complex") || lower.contains("4627") || lower.contains("evox")
+                            || lower.contains("flash") || lower.contains("kernel")) score += 5;
+                    if (lower.endsWith(".bin") || lower.endsWith(".rom")) score += 1;
+                    if (lower.contains("mcpx") || lower.contains("eeprom")) score -= 20;
+                    bios.add(new FoundFile(uri, name, size, score));
+                } else if (size >= HDD_MIN_SIZE || size < 0) {
+                    int score = 0;
+                    if (lower.endsWith(".qcow2")) score += 10;
+                    else if (lower.endsWith(".img")) score += 4;
+                    else continue;
+                    if (lower.contains("hdd") || lower.contains("xbox")) score += 5;
+                    hdd.add(new FoundFile(uri, name, size, score));
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "System folder scan failed in " + documentId, e);
+        }
+    }
+
+    private static FoundFile best(List<FoundFile> list) {
+        FoundFile best = null;
+        for (FoundFile f : list) {
+            if (best == null || f.score > best.score) {
+                best = f;
+            }
+        }
+        return best;
+    }
+
+    private void autoImportSystemFiles(Uri treeUri) {
+        importInProgress = true;
+        appendLog(getString(R.string.auto_import_scanning));
+        new Thread(() -> {
+            List<FoundFile> mcpx = new ArrayList<>();
+            List<FoundFile> bios = new ArrayList<>();
+            List<FoundFile> hdd = new ArrayList<>();
+            try {
+                collectSystemCandidates(treeUri, DocumentsContract.getTreeDocumentId(treeUri), 0, mcpx, bios, hdd);
+            } catch (Exception e) {
+                Log.w(TAG, "System folder scan failed", e);
+            }
+            FoundFile[] picks = {best(mcpx), best(bios), best(hdd)};
+            int[] reqs = {REQ_MCPX, REQ_BIOS, REQ_HDD};
+            StringBuilder report = new StringBuilder(getString(R.string.auto_import_result));
+            int imported = 0;
+            for (int i = 0; i < 3; i++) {
+                String label = labelFor(reqs[i]);
+                if (picks[i] == null) {
+                    report.append("\n  ").append(label).append(": ").append(getString(R.string.auto_import_not_found));
+                    continue;
+                }
+                try {
+                    final String step = label + " <- " + picks[i].name;
+                    runOnUiThread(() -> appendLog(getString(R.string.auto_import_copying, step)));
+                    File copied = copyToPrivateFile(reqs[i], picks[i].uri);
+                    final int req = reqs[i];
+                    runOnUiThread(() -> files.put(req, copied));
+                    report.append("\n  ").append(label).append(": ").append(picks[i].name)
+                            .append(" (").append(humanSize(copied.length())).append(")");
+                    imported++;
+                } catch (Exception e) {
+                    report.append("\n  ").append(label).append(": ").append(e.getMessage());
+                }
+            }
+            final String text = report.toString();
+            final int count = imported;
+            runOnUiThread(() -> {
+                importInProgress = false;
+                appendLog(text);
+                refreshStatus();
+                if (isSystemOperational()) {
+                    appendLog(getString(R.string.auto_import_ready));
+                } else if (count < 3) {
+                    appendLog(getString(R.string.auto_import_partial));
+                }
+            });
+        }, "xbox-auto-import").start();
     }
 
     private void selectLibraryFolder(Intent data, Uri treeUri) {

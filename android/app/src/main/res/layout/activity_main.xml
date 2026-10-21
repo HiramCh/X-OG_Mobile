@@ -330,6 +330,20 @@
                         android:textStyle="bold" />
 
                     <Button
+                        android:id="@+id/autoImportSystemButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/auto_import_system" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/auto_import_explain"
+                        android:textColor="@color/muted"
+                        android:textSize="12sp" />
+
+                    <Button
                         android:id="@+id/pickMcpx"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

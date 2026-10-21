@@ -8,4 +8,14 @@
     <string name="aim_invert_y">Invertir eje vertical</string>
     <string name="aim_sensitivity">Sensibilidad de apuntado: %1$d%%</string>
     <string name="aim_anti_deadzone">Compensación de zona muerta: %1$d%%</string>
+    <string name="auto_import_system">Importar archivos de sistema automáticamente</string>
+    <string name="auto_import_explain">Pon tu MCPX (512 bytes), BIOS (256 KB o 1 MB) e imagen HDD (.qcow2/.img) en una carpeta, por ejemplo Descargas/Xbox, y elige esa carpeta.</string>
+    <string name="auto_import_hint">Elige la carpeta con tu MCPX, BIOS y HDD (Android no deja elegir Descargas directamente; usa una subcarpeta como Descargas/Xbox).</string>
+    <string name="auto_import_busy">Ya hay una importación en curso.</string>
+    <string name="auto_import_scanning">Buscando MCPX, BIOS y HDD en la carpeta...</string>
+    <string name="auto_import_copying">Importando %1$s</string>
+    <string name="auto_import_result">Resultado de la importación automática:</string>
+    <string name="auto_import_not_found">no encontrado</string>
+    <string name="auto_import_ready">Archivos de sistema listos. Ya puedes iniciar un juego.</string>
+    <string name="auto_import_partial">Faltan archivos; agrégalos a la carpeta o elígelos manualmente abajo.</string>
 </resources>
