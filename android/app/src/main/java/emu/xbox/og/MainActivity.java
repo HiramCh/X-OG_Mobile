@@ -203,7 +203,87 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         }
     };
 
+    private boolean coreDeathReported;
+
+    private void checkCoreDeath() {
+        if (coreDeathReported || !NativeBridge.nativeIsCoreDead()) {
+            return;
+        }
+        coreDeathReported = true;
+        emulationPaused = false;
+        hidePauseOverlay();
+        updateEmulationUi();
+        showFilesTab(true);
+        setSetupPanelVisible(true);
+        appendLog(getString(R.string.core_failed));
+        appendLog(readRunLogTail("xemu-last-run.log", 40));
+    }
+
+    /** Last lines of a core run log in the app's private files dir. */
+    private String readRunLogTail(String name, int maxLines) {
+        File f = new File(getFilesDir(), name);
+        if (!f.isFile()) {
+            return "";
+        }
+        java.util.ArrayDeque<String> lines = new java.util.ArrayDeque<>();
+        try (java.io.BufferedReader r = new java.io.BufferedReader(
+                new java.io.InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                lines.addLast(line);
+                if (lines.size() > maxLines) {
+                    lines.removeFirst();
+                }
+            }
+        } catch (IOException e) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            sb.append(line).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static boolean logHasFatal(String text) {
+        return text != null && text.contains("[X-OG FATAL]");
+    }
+
+    /** A hard crash kills the process; explain it on the next start. */
+    private void reportPreviousCrash() {
+        String last = readRunLogTail("xemu-last-run.log", 40);
+        if (!logHasFatal(last)) {
+            return;
+        }
+        appendLog(getString(R.string.core_previous_crash));
+        appendLog(last);
+        File f = new File(getFilesDir(), "xemu-last-run.log");
+        f.renameTo(new File(getFilesDir(), "xemu-prev-run.log"));
+    }
+
+    private void shareRunLog() {
+        String current = readRunLogTail("xemu-last-run.log", 300);
+        String previous = readRunLogTail("xemu-prev-run.log", 300);
+        StringBuilder sb = new StringBuilder();
+        sb.append("X-OG Mobile H2 ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
+                .append(" / Android ").append(Build.VERSION.RELEASE)
+                .append(" / SoC ").append(Build.VERSION.SDK_INT >= 31 ? Build.SOC_MODEL : Build.HARDWARE)
+                .append("\n\n--- App log ---\n").append(logText.getText())
+                .append("\n--- Last core run ---\n").append(current)
+                .append("\n--- Previous core run ---\n").append(previous);
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_SUBJECT, "X-OG Mobile H2 log");
+        send.putExtra(Intent.EXTRA_TEXT, sb.toString());
+        try {
+            startActivity(Intent.createChooser(send, getString(R.string.share_log)));
+        } catch (ActivityNotFoundException e) {
+            appendLog("Share unavailable: " + e.getMessage());
+        }
+    }
+
     private void updateFpsCounter() {
+        checkCoreDeath();
         if (fpsCounter == null) {
             return;
         }
@@ -320,6 +400,8 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
                 getFilesDir().getAbsolutePath(),
                 getCacheDir().getAbsolutePath(),
                 getApplicationInfo().nativeLibraryDir));
+        reportPreviousCrash();
+        findViewById(R.id.shareLogButton).setOnClickListener(v -> shareRunLog());
         loadExistingFiles();
         scanSavedLibraryFolder(false);
         refreshStatus();
@@ -1432,6 +1514,102 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         return clean;
     }
 
+    // ---- Pre-launch validation (xemu exits on several of these) ----
+
+    private static final String MCPX_10_MD5 = "d49c52a4102f6df7bcf8d0617ac475ed";
+    private static final String MCPX_11_MD5 = "2870d58a459c745d7cc4c6122ceb3dcb";
+    /** Game partition offset inside a full (Redump-style) Xbox disc image. */
+    private static final long REDUMP_GAME_OFFSET = 0x18300000L;
+
+    private static String md5Hex(File f) {
+        try (FileInputStream in = new FileInputStream(f)) {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                md.update(buf, 0, n);
+            }
+            StringBuilder sb = new StringBuilder();
+            for (byte b : md.digest()) {
+                sb.append(String.format(Locale.ROOT, "%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static boolean fileStartsWith(File f, byte[] magic) {
+        try (FileInputStream in = new FileInputStream(f)) {
+            byte[] head = new byte[magic.length];
+            if (in.read(head) != magic.length) {
+                return false;
+            }
+            return java.util.Arrays.equals(head, magic);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /** Where the XDVDFS volume of the selected disc lives: 0 = XISO, else offset, -1 = not found. */
+    private long discVolumeOffset() {
+        if (discSelection == null) {
+            return -1;
+        }
+        try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(discSelection.uri, "r")) {
+            if (pfd == null) {
+                return -1;
+            }
+            try (FileInputStream input = new FileInputStream(pfd.getFileDescriptor());
+                 FileChannel channel = input.getChannel()) {
+                long[] bases = {0L, REDUMP_GAME_OFFSET};
+                for (long base : bases) {
+                    ByteBuffer d = readBuffer(channel, base + 0x10000L, XDVD_SECTOR_SIZE);
+                    if (d != null && matchesMagic(d, 0)) {
+                        return base;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Disc check failed", e);
+        }
+        return -1;
+    }
+
+    /** Returns false (and explains why) when launching would just make xemu exit. */
+    private boolean preLaunchCheck() {
+        File mcpx = files.get(REQ_MCPX);
+        File bios = files.get(REQ_BIOS);
+        File hdd = files.get(REQ_HDD);
+        if (mcpx == null || mcpx.length() != MCPX_SIZE) {
+            appendLog(getString(R.string.check_mcpx_size, mcpx == null ? -1 : mcpx.length()));
+            showSystemFilesScreen();
+            return false;
+        }
+        String md5 = md5Hex(mcpx);
+        if (!MCPX_10_MD5.equals(md5) && !MCPX_11_MD5.equals(md5)) {
+            appendLog(getString(R.string.check_mcpx_md5, md5));
+        }
+        if (bios == null || !isBiosSize(bios.length())) {
+            appendLog(getString(R.string.check_bios_size, bios == null ? -1 : bios.length()));
+            showSystemFilesScreen();
+            return false;
+        }
+        byte[] qcowMagic = {'Q', 'F', 'I', (byte) 0xfb};
+        if (hdd == null || (!fileStartsWith(hdd, qcowMagic) && hdd.length() < HDD_MIN_SIZE)) {
+            appendLog(getString(R.string.check_hdd));
+            showSystemFilesScreen();
+            return false;
+        }
+        long volume = discVolumeOffset();
+        if (volume == REDUMP_GAME_OFFSET) {
+            appendLog(getString(R.string.check_disc_redump));
+        } else if (volume < 0) {
+            appendLog(getString(R.string.check_disc_unknown));
+        }
+        return true;
+    }
+
     private String openDirectDiscPathForLaunch() throws Exception {
         closeLaunchDiscPfd();
         if (discSelection == null) {
@@ -1557,6 +1735,9 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
             return;
         }
         appendLog("Play pressed. Validating selected files before native core start...");
+        if (!preLaunchCheck()) {
+            return;
+        }
         String discPath;
         try {
             discPath = openDirectDiscPathForLaunch();

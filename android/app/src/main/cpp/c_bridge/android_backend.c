@@ -49,6 +49,10 @@ static int g_xemu_thread_valid;
 static int g_xemu_running; /* accessed with __atomic builtins */
 static int g_stdio_redirected;
 
+static int g_log_fd = -1;          /* files/xemu-last-run.log while a core runs */
+static int g_core_dead;            /* core hit a fatal error; process must restart */
+static int g_signals_installed;
+
 static char *g_argv_store[MAX_ARGS];
 static int g_argc;
 
@@ -94,6 +98,10 @@ static void *stdio_pump(void *arg) {
                 if (len) {
                     line[len] = 0;
                     LOGI("xemu: %s", line);
+                    if (g_log_fd >= 0) {
+                        line[len] = '\n';
+                        write(g_log_fd, line, len + 1);
+                    }
                     len = 0;
                 }
             } else {
@@ -101,6 +109,10 @@ static void *stdio_pump(void *arg) {
                 if (len >= 480) {
                     line[len] = 0;
                     LOGI("xemu: %s", line);
+                    if (g_log_fd >= 0) {
+                        line[len] = '\n';
+                        write(g_log_fd, line, len + 1);
+                    }
                     len = 0;
                 }
             }
@@ -129,6 +141,128 @@ static void start_stdio_logcat_locked(void) {
         pthread_detach(t);
     }
     g_stdio_redirected = 1;
+}
+
+/* ---- Fatal-error containment ----
+ *
+ * The xemu core runs inside the app process, and QEMU reacts to many setup
+ * problems (bad MCPX/BIOS/HDD, unreadable disc, failed asserts) with exit()
+ * or abort(), which used to kill the whole app with no explanation. The
+ * bridge is the root of the core's dlopen group, so the definitions below
+ * interpose exit/abort/__assert2 for the core and its libraries: the reason
+ * is written to the run log, the failing thread is parked with pthread_exit,
+ * and the UI stays alive to show what happened. A fresh process is needed
+ * before the next launch because the core's state is unrecoverable.
+ */
+static void fatal_note(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void fatal_note(const char *fmt, ...) {
+    char buf[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf) - 1, fmt, ap);
+    va_end(ap);
+    if (n < 0) {
+        return;
+    }
+    if (n > (int) sizeof(buf) - 2) {
+        n = (int) sizeof(buf) - 2;
+    }
+    LOGW("FATAL: %s", buf);
+    if (g_log_fd >= 0) {
+        static const char prefix[] = "[X-OG FATAL] ";
+        write(g_log_fd, prefix, sizeof(prefix) - 1);
+        buf[n] = '\n';
+        write(g_log_fd, buf, (size_t) n + 1);
+    }
+}
+
+static void park_failed_thread(void) __attribute__((noreturn));
+static void park_failed_thread(void) {
+    pthread_t self = pthread_self();
+    g_core_dead = 1;
+    if (g_xemu_thread_valid) {
+        /* Never join the core thread from Java after this: it may be stuck. */
+        if (self != g_xemu_thread) {
+            pthread_detach(g_xemu_thread);
+        }
+        g_xemu_thread_valid = 0;
+    }
+    pthread_detach(self);
+    set_running(0);
+    pthread_cond_broadcast(&g_core_cv);
+    pthread_exit(NULL);
+}
+
+static int core_active(void) {
+    return running() || g_xemu_thread_valid;
+}
+
+__attribute__((visibility("default"), noreturn))
+void exit(int status) {
+    if (core_active()) {
+        fatal_note("xemu core called exit(%d); see the messages above for the reason", status);
+        park_failed_thread();
+    }
+    void (*real_exit)(int) = (void (*)(int)) dlsym(RTLD_NEXT, "exit");
+    if (real_exit) {
+        real_exit(status);
+    }
+    _exit(status);
+}
+
+__attribute__((visibility("default"), noreturn))
+void abort(void) {
+    if (core_active()) {
+        fatal_note("xemu core called abort()");
+        park_failed_thread();
+    }
+    void (*real_abort)(void) = (void (*)(void)) dlsym(RTLD_NEXT, "abort");
+    if (real_abort) {
+        real_abort();
+    }
+    _exit(134);
+}
+
+__attribute__((visibility("default"), noreturn))
+void __assert2(const char *file, int line, const char *function, const char *expr) {
+    fatal_note("assertion failed: %s (%s:%d, %s)", expr ? expr : "?", file ? file : "?", line,
+               function ? function : "?");
+    if (core_active()) {
+        park_failed_thread();
+    }
+    void (*real_assert)(const char *, int, const char *, const char *) =
+        (void (*)(const char *, int, const char *, const char *)) dlsym(RTLD_NEXT, "__assert2");
+    if (real_assert) {
+        real_assert(file, line, function, expr);
+    }
+    _exit(134);
+}
+
+/* Hard crashes (e.g. inside the GPU driver) cannot be survived; record the
+ * signal so the next app start can explain it, then let it crash normally. */
+static void crash_signal_handler(int sig) {
+    if (g_log_fd >= 0) {
+        char msg[] = "[X-OG FATAL] fatal signal 00 in emulator process (11=SIGSEGV 7=SIGBUS 4=SIGILL 6=SIGABRT 8=SIGFPE)\n";
+        msg[sizeof("[X-OG FATAL] fatal signal ") - 1] = (char) ('0' + (sig / 10) % 10);
+        msg[sizeof("[X-OG FATAL] fatal signal ")] = (char) ('0' + sig % 10);
+        write(g_log_fd, msg, sizeof(msg) - 1);
+    }
+    signal(sig, SIG_DFL);
+    if (sig == SIGABRT) {
+        raise(sig);
+    }
+}
+
+static void install_crash_handlers(void) {
+    if (g_signals_installed) {
+        return;
+    }
+    g_signals_installed = 1;
+    signal(SIGSEGV, crash_signal_handler);
+    signal(SIGBUS, crash_signal_handler);
+    signal(SIGILL, crash_signal_handler);
+    signal(SIGFPE, crash_signal_handler);
+    signal(SIGABRT, crash_signal_handler);
 }
 
 static void ensure_dir(const char *path) {
@@ -270,6 +404,11 @@ Java_emu_xbox_og_NativeBridge_nativeLaunch(JNIEnv *env, jclass cls, jstring mcpx
         pthread_mutex_unlock(&g_lock);
         return ret(env, "Missing required file. MCPX, BIOS and HDD are required before launch.");
     }
+    if (g_core_dead) {
+        pthread_mutex_unlock(&g_lock);
+        return ret(env, "The emulator core stopped after a fatal error. Close the app completely "
+                        "(swipe it away from recent apps) and open it again before the next launch.");
+    }
     if (running()) {
         pthread_mutex_unlock(&g_lock);
         return ret(env, "xemu core is already running in-process");
@@ -295,6 +434,21 @@ Java_emu_xbox_og_NativeBridge_nativeLaunch(JNIEnv *env, jclass cls, jstring mcpx
         g_disc_dup_fd = dup_fd;
     } else {
         g_disc_dup_fd = -1;
+    }
+
+    {
+        char log_path[PATH_BUF + 32], prev_path[PATH_BUF + 32];
+        snprintf(log_path, sizeof(log_path), "%s/xemu-last-run.log", g_files_dir);
+        snprintf(prev_path, sizeof(prev_path), "%s/xemu-prev-run.log", g_files_dir);
+        if (g_log_fd < 0) {
+            rename(log_path, prev_path);
+            g_log_fd = open(log_path, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_CLOEXEC, 0600);
+        }
+        if (g_log_fd >= 0) {
+            static const char hdr[] = "=== X-OG Mobile H2 core launch ===\n";
+            write(g_log_fd, hdr, sizeof(hdr) - 1);
+        }
+        install_crash_handlers();
     }
 
     free_args();
@@ -471,6 +625,13 @@ Java_emu_xbox_og_NativeBridge_nativeIsRunning(JNIEnv *env, jclass cls) {
     (void) env;
     (void) cls;
     return running() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_emu_xbox_og_NativeBridge_nativeIsCoreDead(JNIEnv *env, jclass cls) {
+    (void) env;
+    (void) cls;
+    return g_core_dead ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jlongArray JNICALL

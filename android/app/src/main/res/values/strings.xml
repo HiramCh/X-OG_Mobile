@@ -68,4 +68,13 @@
     <string name="auto_import_not_found">not found</string>
     <string name="auto_import_ready">System files ready. You can start a game.</string>
     <string name="auto_import_partial">Some files are missing; add them to the folder or pick them manually below.</string>
+    <string name="share_log">Share emulator log</string>
+    <string name="core_failed">The emulator core stopped with a fatal error (the app stayed open). Reason and last core messages below. Fix the cause, then close the app completely and reopen it before trying again. You can send this with Settings → Share emulator log.</string>
+    <string name="core_previous_crash">Last time the emulator crashed while running. Last core messages below (Settings → Share emulator log to send them).</string>
+    <string name="check_mcpx_size">MCPX must be exactly 512 bytes (yours: %1$d). xemu closes immediately with a wrong MCPX. Re-import it.</string>
+    <string name="check_mcpx_md5">Warning: MCPX checksum %1$s does not match a known MCPX 1.0/1.1 dump; it may be corrupt.</string>
+    <string name="check_bios_size">BIOS must be 256 KB, 512 KB or 1 MB (yours: %1$d bytes). Re-import it.</string>
+    <string name="check_hdd">The HDD file is not a qcow2 image or is too small. Use xbox_hdd.qcow2 from the xemu project.</string>
+    <string name="check_disc_redump">Warning: the game is a full (Redump) disc image, not an XISO. xemu needs XISO: convert it with extract-xiso. Trying anyway…</string>
+    <string name="check_disc_unknown">Warning: no Xbox file system found in the game image. It may be corrupt or not an Xbox disc. Trying anyway…</string>
 </resources>

@@ -13,7 +13,7 @@ mkdir -p "$B/gen" "$B/src" "$B/classes" "$B/stubs" "$B/lib/arm64-v8a"
 T=--target=aarch64-linux-android29
 JINC=$(dirname "$(dirname "$(readlink -f "$(which javac)")")")/include
 echo 'void __xog_stub(void){}' > "$B/stub.c"
-for l in c log android vulkan; do
+for l in c log android vulkan dl; do
   clang $T -fPIC -shared -nostdlib -fuse-ld=lld -Wl,-soname,lib$l.so "$B/stub.c" -o "$B/stubs/lib$l.so"
 done
 clang $T -std=c11 -O2 -fPIC -Wall -nostdlibinc -I"$A/cpp/c_bridge/include" -I"$A/cpp/c_bridge" \
@@ -22,7 +22,7 @@ clang $T -std=c11 -O2 -fPIC -Wall -nostdlibinc -I"$A/cpp/c_bridge/include" -I"$A
 clang $T -shared -nostdlib -fuse-ld=lld -Wl,-soname,libxboxemu_android.so -Wl,-z,max-page-size=16384 \
   -Wl,--hash-style=both -Wl,--build-id=sha1 -Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now \
   "$B/bridge.o" -L"$B/stubs" -L"$A/jniLibs/arm64-v8a" -l:libxemu-core-i386.so \
-  -landroid -llog -lvulkan -lc -o "$B/lib/arm64-v8a/libxboxemu_android.so"
+  -landroid -llog -lvulkan -ldl -lc -o "$B/lib/arm64-v8a/libxboxemu_android.so"
 for f in libc++_shared.so libqemu-system-i386.so libxemu-core-i386.so; do
   llvm-strip --strip-debug -o "$B/lib/arm64-v8a/$f" "$A/jniLibs/arm64-v8a/$f"
 done
@@ -32,7 +32,7 @@ python3 - "$A/AndroidManifest.xml" "$B/AndroidManifest.xml" <<'EOF'
 import sys
 s=open(sys.argv[1]).read()
 s=s.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
- '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="emu.xbox.og" android:versionCode="3" android:versionName="0.1.1-h2mtk">\n    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="36" />')
+ '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="emu.xbox.og" android:versionCode="4" android:versionName="0.1.2-h2mtk">\n    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="36" />')
 s=s.replace('android:name=".','android:name="emu.xbox.og.')
 s=s.replace('android:theme="@style/AppTheme">','android:theme="@style/AppTheme"\n        android:extractNativeLibs="true">')
 open(sys.argv[2],'w').write(s)

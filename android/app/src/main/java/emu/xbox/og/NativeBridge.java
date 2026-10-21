@@ -24,6 +24,7 @@ final class NativeBridge {
     static native String nativeResume();
     static native String nativeStop(int timeoutMs);
     static native boolean nativeIsRunning();
+    static native boolean nativeIsCoreDead();
     // [produced, presented] cumulative counts; see xemu_android_get_frame_stats.
     static native long[] nativeGetFrameStats();
     // Diagnostic-only: logs QEMU runstate/vmstop/clock state to logcat.

@@ -178,6 +178,12 @@
                         android:textSize="13sp" />
 
                     <Button
+                        android:id="@+id/shareLogButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/share_log" />
+
+                    <Button
                         android:id="@+id/halo2PresetButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

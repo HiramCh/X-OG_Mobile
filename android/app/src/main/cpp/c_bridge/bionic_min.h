@@ -53,6 +53,36 @@ ssize_t read(int fd, void *buf, size_t n);
 int chdir(const char *path);
 int mkdir(const char *path, mode_t mode);
 
+/* fcntl / unistd (arm64 generic values) */
+#define O_WRONLY 01
+#define O_CREAT 0100
+#define O_TRUNC 01000
+#define O_APPEND 02000
+#define O_CLOEXEC 02000000
+int open(const char *path, int flags, ...);
+ssize_t write(int fd, const void *buf, size_t n);
+int rename(const char *from, const char *to);
+
+/* threads leaving / process exit */
+pthread_t pthread_self(void);
+void pthread_exit(void *ret) __attribute__((noreturn));
+void _exit(int status) __attribute__((noreturn));
+
+/* signals */
+typedef void (*sighandler_t)(int);
+#define SIG_DFL ((sighandler_t) 0)
+#define SIGILL 4
+#define SIGABRT 6
+#define SIGBUS 7
+#define SIGFPE 8
+#define SIGSEGV 11
+sighandler_t signal(int sig, sighandler_t handler);
+int raise(int sig);
+
+/* libdl */
+#define RTLD_NEXT ((void *) -1L)
+void *dlsym(void *handle, const char *symbol);
+
 /* liblog */
 #define ANDROID_LOG_INFO 4
 #define ANDROID_LOG_WARN 5
