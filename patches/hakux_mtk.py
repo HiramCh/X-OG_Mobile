@@ -29,8 +29,8 @@ def sub(path, old, new, count=1):
 # identity
 sub("android/app/build.gradle.kts", 'applicationId = "com.rfandango.haku_x"',
     'applicationId = "com.rfandango.haku_x.h2mtk"')
-sub("android/app/build.gradle.kts", 'versionCode = 5', 'versionCode = 8')
-sub("android/app/build.gradle.kts", 'versionName = "0.3.1"', 'versionName = "0.3.1-h2mtk4"')
+sub("android/app/build.gradle.kts", 'versionCode = 5', 'versionCode = 9')
+sub("android/app/build.gradle.kts", 'versionName = "0.3.1"', 'versionName = "0.3.1-h2mtk5"')
 sub("android/app/build.gradle.kts", 'resValue("string", "app_name", "hakuX")',
     'resValue("string", "app_name", "hakuX H2 MTK")')
 
